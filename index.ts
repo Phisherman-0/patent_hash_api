@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { registerRoutes } from './routes';
+import { registerRoutes, initializeRoutes } from './routes';
 
 const app = express();
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -71,9 +71,22 @@ if (IS_PRODUCTION) {
   });
 }
 
-(async () => {
-  const server = await registerRoutes(app);
+// Initialize the app
+async function initializeApp() {
+  if (IS_PRODUCTION) {
+    // For Vercel serverless functions, use initializeRoutes
+    await initializeRoutes(app);
+  } else {
+    // For local development, use registerRoutes which starts a server
+    const server = await registerRoutes(app);
+    const port = parseInt(process.env.PORT || '5000', 10);
+    server.listen(port, () => {
+      console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
+      console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
+    });
+  }
 
+  // Error handling middleware
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -84,26 +97,10 @@ if (IS_PRODUCTION) {
 
     res.status(status).json({ message });
   });
+}
 
-  // Serve static files in production
-  if (IS_PRODUCTION) {
-    const path = require('path');
-    const staticPath = path.join(__dirname, '../frontend/dist');
-    app.use(express.static(staticPath));
-    
-    // Catch-all handler for SPA
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.join(staticPath, 'index.html'));
-    });
-  }
+// Initialize for both Vercel and local development
+initializeApp().catch(console.error);
 
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
-    console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
-  });
-})();
+// For Vercel serverless functions, export the app
+export default app;

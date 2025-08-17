@@ -1,10 +1,4 @@
 var __defProp = Object.defineProperty;
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -1380,6 +1374,422 @@ async function registerRoutes(app2) {
   const httpServer = createServer(app2);
   return httpServer;
 }
+async function initializeRoutes(app2) {
+  const session = await import("express-session");
+  const pgSession = (await import("connect-pg-simple")).default(session.default);
+  const IS_PRODUCTION2 = process.env.NODE_ENV === "production";
+  app2.use(session.default({
+    store: new pgSession({
+      pool,
+      tableName: "sessions"
+    }),
+    secret: process.env.SESSION_SECRET || "fallback-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: IS_PRODUCTION2,
+      // HTTPS only in production
+      httpOnly: true,
+      maxAge: 1e3 * 60 * 60 * 24,
+      // 24 hours
+      sameSite: IS_PRODUCTION2 ? "strict" : "lax"
+    }
+  }));
+  app2.get("/api/auth/user/settings", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user.settings || {});
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+  app2.put("/api/auth/user/settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { settings } = req.body;
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const currentSettings = user.settings || {};
+      const updatedSettings = { ...currentSettings, ...settings };
+      await storage.updateUserSettings(userId, updatedSettings);
+      res.json({ message: "Settings updated successfully", settings: updatedSettings });
+    } catch (error) {
+      console.error("Error updating user settings:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+  app2.post("/api/auth/register", register);
+  app2.post("/api/auth/login", login);
+  app2.post("/api/auth/logout", logout);
+  app2.get("/api/auth/user", getCurrentUser);
+  app2.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const stats = await storage.getUserStats(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching dashboard stats:", error);
+      res.status(500).json({ message: "Failed to fetch dashboard stats" });
+    }
+  });
+  app2.get("/api/dashboard/activities", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const limit = parseInt(req.query.limit) || 10;
+      const activities = await storage.getUserActivities(userId, limit);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching activities:", error);
+      res.status(500).json({ message: "Failed to fetch activities" });
+    }
+  });
+  app2.get("/api/dashboard/category-stats", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const categoryStats = await storage.getPatentCategoryStats(userId);
+      res.json(categoryStats);
+    } catch (error) {
+      console.error("Error fetching category stats:", error);
+      res.status(500).json({ message: "Failed to fetch category stats" });
+    }
+  });
+  app2.get("/api/patents", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const patents2 = await storage.getPatentsByUser(userId);
+      res.json(patents2);
+    } catch (error) {
+      console.error("Error fetching patents:", error);
+      res.status(500).json({ message: "Failed to fetch patents" });
+    }
+  });
+  app2.get("/api/patents/:id", requireAuth, async (req, res) => {
+    try {
+      const patent = await storage.getPatent(req.params.id);
+      if (!patent) {
+        return res.status(404).json({ message: "Patent not found" });
+      }
+      if (patent.userId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      res.json(patent);
+    } catch (error) {
+      console.error("Error fetching patent:", error);
+      res.status(500).json({ message: "Failed to fetch patent" });
+    }
+  });
+  app2.post("/api/patents", requireAuth, upload.array("documents"), async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const patentData = insertPatentSchema.parse({
+        ...req.body,
+        userId
+      });
+      const patent = await storage.createPatent(patentData);
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          const fileBuffer = fs2.readFileSync(file.path);
+          const hash = crypto2.createHash("sha256").update(fileBuffer).digest("hex");
+          await storage.createPatentDocument({
+            patentId: patent.id,
+            userId,
+            fileName: file.originalname,
+            filePath: file.path,
+            fileType: file.mimetype,
+            fileSize: file.size,
+            hashValue: hash
+          });
+        }
+        try {
+          const hederaResult = await hederaService.storePatentHash(patent.id, req.files[0].path);
+          await storage.updatePatent(patent.id, {
+            hederaTopicId: hederaResult.topicId,
+            hederaMessageId: hederaResult.messageId,
+            hashValue: hederaResult.hash
+          });
+          await storage.createBlockchainTransaction({
+            patentId: patent.id,
+            transactionType: "hash_storage",
+            hederaTopicId: hederaResult.topicId,
+            hederaMessageId: hederaResult.messageId,
+            status: "confirmed"
+          });
+        } catch (hederaError) {
+          console.error("Hedera storage error:", hederaError);
+        }
+      }
+      await storage.createPatentActivity({
+        patentId: patent.id,
+        userId,
+        activityType: "created",
+        description: `Patent "${patent.title}" created`
+      });
+      res.status(201).json(patent);
+    } catch (error) {
+      console.error("Error creating patent:", error);
+      res.status(500).json({ message: "Failed to create patent" });
+    }
+  });
+  app2.put("/api/patents/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const patent = await storage.getPatent(req.params.id);
+      if (!patent) {
+        return res.status(404).json({ message: "Patent not found" });
+      }
+      if (patent.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const updates = insertPatentSchema.partial().parse(req.body);
+      const updatedPatent = await storage.updatePatent(req.params.id, updates);
+      await storage.createPatentActivity({
+        patentId: patent.id,
+        userId,
+        activityType: "updated",
+        description: `Patent "${patent.title}" updated`
+      });
+      res.json(updatedPatent);
+    } catch (error) {
+      console.error("Error updating patent:", error);
+      res.status(500).json({ message: "Failed to update patent" });
+    }
+  });
+  app2.delete("/api/patents/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const patent = await storage.getPatent(req.params.id);
+      if (!patent) {
+        return res.status(404).json({ message: "Patent not found" });
+      }
+      if (patent.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      await storage.deletePatent(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting patent:", error);
+      res.status(500).json({ message: "Failed to delete patent" });
+    }
+  });
+  app2.post("/api/ai/prior-art-search", requireAuth, async (req, res) => {
+    try {
+      const { patentId, description } = req.body;
+      const userId = req.user.id;
+      const patent = await storage.getPatent(patentId);
+      if (!patent || patent.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const searchResults = await aiService.performPriorArtSearch(description);
+      for (const result of searchResults) {
+        await storage.createPriorArtResult({
+          patentId,
+          externalPatentId: result.patentId,
+          similarityScore: result.similarityScore.toString(),
+          title: result.title,
+          description: result.description,
+          source: result.source
+        });
+      }
+      await storage.createAIAnalysis({
+        patentId,
+        analysisType: "prior_art",
+        result: { results: searchResults },
+        confidence: Math.max(...searchResults.map((r) => r.similarityScore)).toString()
+      });
+      res.json(searchResults);
+    } catch (error) {
+      console.error("Error in prior art search:", error);
+      res.status(500).json({ message: "Failed to perform prior art search" });
+    }
+  });
+  app2.post("/api/ai/patent-valuation", requireAuth, async (req, res) => {
+    try {
+      const { patentId } = req.body;
+      const userId = req.user.id;
+      const patent = await storage.getPatent(patentId);
+      if (!patent || patent.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const valuation = await aiService.evaluatePatentValue(patent);
+      await storage.updatePatent(patentId, {
+        estimatedValue: valuation.estimatedValue.toString()
+      });
+      await storage.createAIAnalysis({
+        patentId,
+        analysisType: "valuation",
+        result: valuation,
+        confidence: valuation.confidence.toString()
+      });
+      await storage.createPatentActivity({
+        patentId,
+        userId,
+        activityType: "valuation_updated",
+        description: `Patent valuation updated to $${valuation.estimatedValue}`
+      });
+      res.json(valuation);
+    } catch (error) {
+      console.error("Error in patent valuation:", error);
+      res.status(500).json({ message: "Failed to evaluate patent value" });
+    }
+  });
+  app2.post("/api/ai/similarity-detection", requireAuth, async (req, res) => {
+    try {
+      const { patentId, targetText } = req.body;
+      const userId = req.user.id;
+      const patent = await storage.getPatent(patentId);
+      if (!patent || patent.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const similarity = await aiService.detectSimilarity(patent.description, targetText);
+      await storage.createAIAnalysis({
+        patentId,
+        analysisType: "similarity",
+        result: similarity,
+        confidence: similarity.confidence.toString()
+      });
+      res.json(similarity);
+    } catch (error) {
+      console.error("Error in similarity detection:", error);
+      res.status(500).json({ message: "Failed to detect similarity" });
+    }
+  });
+  app2.post("/api/ai/patent-drafting", requireAuth, async (req, res) => {
+    try {
+      const { title, description, category } = req.body;
+      const draftDocument = await aiService.generatePatentDraft({
+        title,
+        description,
+        category
+      });
+      res.json(draftDocument);
+    } catch (error) {
+      console.error("Error in patent drafting:", error);
+      res.status(500).json({ message: "Failed to generate patent draft" });
+    }
+  });
+  app2.get("/api/blockchain/verify/:patentId", requireAuth, async (req, res) => {
+    try {
+      const patent = await storage.getPatent(req.params.patentId);
+      if (!patent) {
+        return res.status(404).json({ message: "Patent not found" });
+      }
+      if (!patent.hederaTopicId || !patent.hederaMessageId) {
+        return res.status(400).json({ message: "Patent not stored on blockchain" });
+      }
+      const verification = await hederaService.verifyPatentHash(
+        patent.hederaTopicId,
+        patent.hederaMessageId,
+        patent.hashValue
+      );
+      res.json(verification);
+    } catch (error) {
+      console.error("Error verifying patent:", error);
+      res.status(500).json({ message: "Failed to verify patent on blockchain" });
+    }
+  });
+  app2.post("/api/blockchain/mint-nft/:patentId", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const patent = await storage.getPatent(req.params.patentId);
+      if (!patent || patent.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      if (patent.hederaNftId) {
+        return res.status(400).json({ message: "NFT already minted for this patent" });
+      }
+      const nftResult = await hederaService.mintPatentNFT(patent);
+      await storage.updatePatent(req.params.patentId, {
+        hederaNftId: nftResult.nftId
+      });
+      await storage.createBlockchainTransaction({
+        patentId: patent.id,
+        transactionType: "nft_mint",
+        hederaTransactionId: nftResult.transactionId,
+        status: "confirmed"
+      });
+      await storage.createPatentActivity({
+        patentId: patent.id,
+        userId,
+        activityType: "nft_minted",
+        description: `NFT minted for patent "${patent.title}"`
+      });
+      res.json(nftResult);
+    } catch (error) {
+      console.error("Error minting NFT:", error);
+      res.status(500).json({ message: "Failed to mint patent NFT" });
+    }
+  });
+  app2.get("/api/documents/user", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const documents = await storage.getPatentDocumentsByUser(userId);
+      res.json(documents);
+    } catch (error) {
+      console.error("Error fetching user documents:", error);
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+  app2.get("/api/documents/:id/download", requireAuth, async (req, res) => {
+    try {
+      const documentId = req.params.id;
+      const userId = req.user.id;
+      const documents = await storage.getPatentDocumentsByUser(userId);
+      const document = documents.find((doc) => doc.id === documentId);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      if (!fs2.existsSync(document.filePath)) {
+        return res.status(404).json({ message: "File not found on disk" });
+      }
+      res.setHeader("Content-Disposition", `attachment; filename="${document.fileName}"`);
+      res.setHeader("Content-Type", document.fileType);
+      const fileStream = fs2.createReadStream(document.filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error("Error downloading document:", error);
+      res.status(500).json({ message: "Failed to download document" });
+    }
+  });
+  app2.delete("/api/documents/:id", requireAuth, async (req, res) => {
+    try {
+      const documentId = req.params.id;
+      const userId = req.user.id;
+      const documents = await storage.getPatentDocumentsByUser(userId);
+      const document = documents.find((doc) => doc.id === documentId);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      await storage.deletePatentDocument(documentId);
+      if (fs2.existsSync(document.filePath)) {
+        fs2.unlinkSync(document.filePath);
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      res.status(500).json({ message: "Failed to delete document" });
+    }
+  });
+  app2.get("/api/search/patents", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const query = req.query.q;
+      if (!query) {
+        return res.status(400).json({ message: "Search query required" });
+      }
+      const results = await storage.searchPatents(query, userId);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching patents:", error);
+      res.status(500).json({ message: "Failed to search patents" });
+    }
+  });
+}
 
 // index.ts
 var app = express();
@@ -1432,8 +1842,17 @@ if (IS_PRODUCTION) {
     }
   });
 }
-(async () => {
-  const server = await registerRoutes(app);
+async function initializeApp() {
+  if (IS_PRODUCTION) {
+    await initializeRoutes(app);
+  } else {
+    const server = await registerRoutes(app);
+    const port = parseInt(process.env.PORT || "5000", 10);
+    server.listen(port, () => {
+      console.log(`\u{1F680} Server running on port ${port} (${NODE_ENV})`);
+      console.log(`\u{1F4E1} CORS origins: ${corsOrigins.join(", ")}`);
+    });
+  }
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -1442,21 +1861,9 @@ if (IS_PRODUCTION) {
     }
     res.status(status).json({ message });
   });
-  if (IS_PRODUCTION) {
-    const path = __require("path");
-    const staticPath = path.join(__dirname, "../frontend/dist");
-    app.use(express.static(staticPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(staticPath, "index.html"));
-    });
-  }
-  const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true
-  }, () => {
-    console.log(`\u{1F680} Server running on port ${port} (${NODE_ENV})`);
-    console.log(`\u{1F4E1} CORS origins: ${corsOrigins.join(", ")}`);
-  });
-})();
+}
+initializeApp().catch(console.error);
+var index_default = app;
+export {
+  index_default as default
+};
