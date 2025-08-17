@@ -1,10 +1,8 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, createLogger } from "vite";
+import { createServer as createViteServer } from "vite";
 import { type Server } from "http";
-
-const viteLogger = createLogger();
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -27,11 +25,15 @@ export async function setupVite(app: Express, server: Server) {
   const vite = await createViteServer({
     configFile: false,
     customLogger: {
-      ...viteLogger,
-      error: (msg: any, options?: any) => {
-        viteLogger.error(msg, options);
+      info: (msg: string) => console.log(`[vite] ${msg}`),
+      warn: (msg: string) => console.warn(`[vite] ${msg}`),
+      error: (msg: string) => {
+        console.error(`[vite] ${msg}`);
         process.exit(1);
       },
+      warnOnce: (msg: string) => console.warn(`[vite] ${msg}`),
+      hasWarned: false,
+      clearScreen: () => {},
     },
     server: serverOptions,
     appType: "custom",
