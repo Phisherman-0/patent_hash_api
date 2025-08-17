@@ -71,36 +71,38 @@ if (IS_PRODUCTION) {
   });
 }
 
-// Initialize the app
-async function initializeApp() {
+// Error handling middleware (must be after routes)
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+
   if (IS_PRODUCTION) {
-    // For Vercel serverless functions, use initializeRoutes
-    await initializeRoutes(app);
-  } else {
-    // For local development, use registerRoutes which starts a server
-    const server = await registerRoutes(app);
-    const port = parseInt(process.env.PORT || '5000', 10);
-    server.listen(port, () => {
-      console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
-      console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
-    });
+    console.error('Production error:', err);
   }
 
-  // Error handling middleware
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+  res.status(status).json({ message });
+});
 
-    if (IS_PRODUCTION) {
-      console.error('Production error:', err);
+// Initialize based on environment
+if (IS_PRODUCTION) {
+  // For Vercel, we need to initialize routes synchronously
+  // We'll handle the async initialization differently
+  console.log('Initializing for Vercel production...');
+} else {
+  // For local development, initialize with server
+  (async () => {
+    try {
+      const server = await registerRoutes(app);
+      const port = parseInt(process.env.PORT || '5000', 10);
+      server.listen(port, () => {
+        console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
+        console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
+      });
+    } catch (error) {
+      console.error('Failed to start development server:', error);
     }
-
-    res.status(status).json({ message });
-  });
+  })();
 }
-
-// Initialize for both Vercel and local development
-initializeApp().catch(console.error);
 
 // For Vercel serverless functions, export the app
 export default app;
