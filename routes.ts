@@ -1,14 +1,15 @@
 import { Express } from 'express';
-import { Server } from 'http';
+import { Server, createServer } from 'http';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { storage } from './storage';
-import { requireAuth } from './auth';
+import { requireAuth, register, login, logout, getCurrentUser } from './auth';
 import { aiService } from './services/aiService';
 import { hederaService } from './services/hederaService';
 import { pool } from './db';
+import { insertPatentSchema } from './shared/schema';
 
 // Configure multer for file uploads
 const upload = multer({
