@@ -10,7 +10,8 @@
           "services/**",
           "server/**",
           "uploads/**"
-        ]
+        ],
+        "maxDuration": 30
       }
     }
   ],
@@ -26,10 +27,5 @@
   ],
   "env": {
     "NODE_ENV": "production"
-  },
-  "functions": {
-    "index.ts": {
-      "maxDuration": 30
-    }
   }
 }
