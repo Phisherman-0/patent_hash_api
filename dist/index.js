@@ -1,4 +1,10 @@
 var __defProp = Object.defineProperty;
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -1426,31 +1432,31 @@ if (IS_PRODUCTION) {
     }
   });
 }
-app.use((err, _req, res, _next) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-  if (IS_PRODUCTION) {
-    console.error("Production error:", err);
-  }
-  res.status(status).json({ message });
-});
-if (IS_PRODUCTION) {
-  console.log("Initializing for Vercel production...");
-} else {
-  (async () => {
-    try {
-      const server = await registerRoutes(app);
-      const port = parseInt(process.env.PORT || "5000", 10);
-      server.listen(port, () => {
-        console.log(`\u{1F680} Server running on port ${port} (${NODE_ENV})`);
-        console.log(`\u{1F4E1} CORS origins: ${corsOrigins.join(", ")}`);
-      });
-    } catch (error) {
-      console.error("Failed to start development server:", error);
+(async () => {
+  const server = await registerRoutes(app);
+  app.use((err, _req, res, _next) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+    if (IS_PRODUCTION) {
+      console.error("Production error:", err);
     }
-  })();
-}
-var index_default = app;
-export {
-  index_default as default
-};
+    res.status(status).json({ message });
+  });
+  if (IS_PRODUCTION) {
+    const path = __require("path");
+    const staticPath = path.join(__dirname, "../frontend/dist");
+    app.use(express.static(staticPath));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(staticPath, "index.html"));
+    });
+  }
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true
+  }, () => {
+    console.log(`\u{1F680} Server running on port ${port} (${NODE_ENV})`);
+    console.log(`\u{1F4E1} CORS origins: ${corsOrigins.join(", ")}`);
+  });
+})();

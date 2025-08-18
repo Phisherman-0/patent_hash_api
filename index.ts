@@ -1,6 +1,7 @@
+import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { registerRoutes, initializeRoutes } from './routes';
+import { setupRoutes } from './routes';
 
 const app = express();
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -26,6 +27,9 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Serve uploaded files statically
+app.use('/uploads', express.static('uploads'));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -71,38 +75,28 @@ if (IS_PRODUCTION) {
   });
 }
 
-// Error handling middleware (must be after routes)
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
+(async () => {
+  const server = await setupRoutes(app);
 
-  if (IS_PRODUCTION) {
-    console.error('Production error:', err);
-  }
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
 
-  res.status(status).json({ message });
-});
-
-// Initialize based on environment
-if (IS_PRODUCTION) {
-  // For Vercel, we need to initialize routes synchronously
-  // We'll handle the async initialization differently
-  console.log('Initializing for Vercel production...');
-} else {
-  // For local development, initialize with server
-  (async () => {
-    try {
-      const server = await registerRoutes(app);
-      const port = parseInt(process.env.PORT || '5000', 10);
-      server.listen(port, () => {
-        console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
-        console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
-      });
-    } catch (error) {
-      console.error('Failed to start development server:', error);
+    if (IS_PRODUCTION) {
+      console.error('Production error:', err);
     }
-  })();
-}
 
-// For Vercel serverless functions, export the app
-export default app;
+    res.status(status).json({ message });
+  });
+
+
+  const port = parseInt(process.env.PORT || '5000', 10);
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true,
+  }, () => {
+    console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
+    console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
+  });
+})();
