@@ -1,22 +1,18 @@
 var __defProp = Object.defineProperty;
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
 // index.ts
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 
 // routes.ts
 import { createServer } from "http";
 import multer from "multer";
+import path from "path";
 import fs2 from "fs";
 import crypto2 from "crypto";
 
@@ -110,7 +106,9 @@ var patents = pgTable("patents", {
   hashValue: varchar("hash_value"),
   hederaTopicId: varchar("hedera_topic_id"),
   hederaMessageId: varchar("hedera_message_id"),
+  hederaTransactionId: varchar("hedera_transaction_id"),
   hederaNftId: varchar("hedera_nft_id"),
+  hederaError: text("hedera_error"),
   aiSuggestedCategory: patentCategoryEnum("ai_suggested_category"),
   aiConfidence: decimal("ai_confidence", { precision: 5, scale: 4 }),
   estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
@@ -849,42 +847,68 @@ var HederaService = class {
     }
     try {
       this.operatorId = AccountId.fromString(accountId);
-      this.operatorKey = PrivateKey.fromString(privateKey);
+      if (privateKey.startsWith("0x")) {
+        this.operatorKey = PrivateKey.fromStringECDSA(privateKey);
+      } else if (privateKey.length === 64) {
+        this.operatorKey = PrivateKey.fromStringECDSA(privateKey);
+      } else {
+        this.operatorKey = PrivateKey.fromString(privateKey);
+      }
       this.client = Client.forTestnet();
       this.client.setOperator(this.operatorId, this.operatorKey);
+      console.log(`\u2705 Hedera client initialized for account: ${this.operatorId.toString()}`);
+      console.log(`\u{1F511} Private key format: ${privateKey.startsWith("0x") ? "ECDSA with 0x prefix" : "Other format"}`);
+      console.log(`\u{1F511} Key length: ${privateKey.length} characters`);
     } catch (error) {
       console.error("Failed to initialize Hedera client:", error);
+      this.client = null;
+      this.operatorId = null;
+      this.operatorKey = null;
     }
   }
   async storePatentHash(patentId, filePath) {
-    if (!this.client) {
-      throw new Error("Hedera client not initialized");
+    if (!this.client || !this.operatorKey) {
+      throw new Error("Hedera client not initialized - check credentials and network connection");
     }
     try {
       const fileBuffer = fs.readFileSync(filePath);
       const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
-      const topicCreateTx = new TopicCreateTransaction().setTopicMemo(`Patent Hash Storage for ${patentId}`).setSubmitKey(this.operatorKey);
+      console.log(`\u{1F4DD} Calculated hash for patent ${patentId}: ${hash}`);
+      console.log(`\u{1F517} Creating Hedera topic for patent ${patentId}...`);
+      const topicCreateTx = new TopicCreateTransaction().setTopicMemo(`Patent Hash Storage for ${patentId}`).setSubmitKey(this.operatorKey).setMaxTransactionFee(2e8);
       const topicCreateSubmit = await topicCreateTx.execute(this.client);
       const topicCreateReceipt = await topicCreateSubmit.getReceipt(this.client);
       const topicId = topicCreateReceipt.topicId;
+      console.log(`\u2705 Topic created: ${topicId.toString()}`);
       const patentData = {
         patentId,
         hash,
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
         action: "patent_hash_storage"
       };
-      const topicMessageTx = new TopicMessageSubmitTransaction().setTopicId(topicId).setMessage(JSON.stringify(patentData));
+      console.log(`\u{1F4E4} Submitting patent data to topic...`);
+      const topicMessageTx = new TopicMessageSubmitTransaction().setTopicId(topicId).setMessage(JSON.stringify(patentData)).setMaxTransactionFee(1e8);
       const topicMessageSubmit = await topicMessageTx.execute(this.client);
       const topicMessageReceipt = await topicMessageSubmit.getReceipt(this.client);
-      return {
+      const result = {
         topicId: topicId.toString(),
         messageId: topicMessageReceipt.topicSequenceNumber?.toString() || "",
         hash,
         transactionId: topicMessageSubmit.transactionId.toString()
       };
+      console.log(`\u2705 Patent hash stored on Hedera blockchain:`, result);
+      return result;
     } catch (error) {
       console.error("Error storing patent hash on Hedera:", error);
-      throw new Error("Failed to store patent hash on blockchain");
+      if (error.message?.includes("INVALID_SIGNATURE")) {
+        throw new Error("Invalid Hedera credentials - private key doesn't match account ID");
+      } else if (error.message?.includes("INSUFFICIENT_PAYER_BALANCE")) {
+        throw new Error("Insufficient HBAR balance for blockchain transaction");
+      } else if (error.message?.includes("TRANSACTION_EXPIRED")) {
+        throw new Error("Blockchain transaction expired - network may be congested");
+      } else {
+        throw new Error(`Failed to store patent hash on blockchain: ${error.message || "Unknown error"}`);
+      }
     }
   }
   async verifyPatentHash(topicId, messageId, expectedHash) {
@@ -955,6 +979,7 @@ var HederaService = class {
 var hederaService = new HederaService();
 
 // routes.ts
+import { eq as eq2 } from "drizzle-orm";
 var upload = multer({
   dest: "uploads/",
   limits: {
@@ -962,9 +987,52 @@ var upload = multer({
     // 50MB limit
   }
 });
-async function registerRoutes(app2) {
+var fileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = "./uploads";
+    if (!fs2.existsSync(uploadDir)) {
+      fs2.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const hash = crypto2.createHash("md5").update(file.originalname + Date.now()).digest("hex");
+    cb(null, hash);
+  }
+});
+var profileImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = "./uploads/profiles";
+    if (!fs2.existsSync(uploadDir)) {
+      fs2.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const userId = req.user?.id || "unknown";
+    const hash = crypto2.createHash("md5").update(userId + Date.now()).digest("hex");
+    const ext = path.extname(file.originalname);
+    cb(null, `profile_${hash}${ext}`);
+  }
+});
+var profileImageUpload = multer({
+  storage: profileImageStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024
+    // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  }
+});
+async function setupRoutes(app2) {
   const session = await import("express-session");
-  const pgSession = (await import("connect-pg-simple")).default(session.default);
+  const connectPgSimple = await import("connect-pg-simple");
+  const pgSession = connectPgSimple.default(session.default);
   const IS_PRODUCTION2 = process.env.NODE_ENV === "production";
   app2.use(session.default({
     store: new pgSession({
@@ -978,8 +1046,8 @@ async function registerRoutes(app2) {
       secure: IS_PRODUCTION2,
       // HTTPS only in production
       httpOnly: true,
-      maxAge: 1e3 * 60 * 60 * 24,
-      // 24 hours
+      maxAge: 1e3 * 60 * 60 * 24 * 7,
+      // 7 days
       sameSite: IS_PRODUCTION2 ? "strict" : "lax"
     }
   }));
@@ -997,15 +1065,14 @@ async function registerRoutes(app2) {
   });
   app2.put("/api/auth/user/settings", requireAuth, async (req, res) => {
     try {
-      const userId = req.user.id;
+      const user = await storage.getUserById(req.user.id);
       const { settings } = req.body;
-      const user = await storage.getUserById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       const currentSettings = user.settings || {};
       const updatedSettings = { ...currentSettings, ...settings };
-      await storage.updateUserSettings(userId, updatedSettings);
+      await storage.updateUserSettings(req.user.id, updatedSettings);
       res.json({ message: "Settings updated successfully", settings: updatedSettings });
     } catch (error) {
       console.error("Error updating user settings:", error);
@@ -1016,6 +1083,86 @@ async function registerRoutes(app2) {
   app2.post("/api/auth/login", login);
   app2.post("/api/auth/logout", logout);
   app2.get("/api/auth/user", getCurrentUser);
+  app2.put("/api/auth/profile", requireAuth, async (req, res) => {
+    try {
+      const { firstName, lastName } = req.body;
+      const userId = req.user.id;
+      const updatedUser = await db.update(users).set({
+        firstName,
+        lastName,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq2(users.id, userId)).returning();
+      if (updatedUser.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const { passwordHash, ...userWithoutPassword } = updatedUser[0];
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  app2.post("/api/auth/profile/image", requireAuth, profileImageUpload.single("profileImage"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file provided" });
+      }
+      const userId = req.user.id;
+      const profileImageUrl = `/uploads/profiles/${req.file.filename}`;
+      const currentUser = await db.select().from(users).where(eq2(users.id, userId)).limit(1);
+      if (currentUser.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (currentUser[0].profileImageUrl) {
+        const oldImagePath = path.join(".", currentUser[0].profileImageUrl);
+        if (fs2.existsSync(oldImagePath)) {
+          fs2.unlinkSync(oldImagePath);
+        }
+      }
+      const updatedUser = await db.update(users).set({
+        profileImageUrl,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq2(users.id, userId)).returning();
+      const { passwordHash, ...userWithoutPassword } = updatedUser[0];
+      res.json({
+        user: userWithoutPassword,
+        message: "Profile image updated successfully"
+      });
+    } catch (error) {
+      console.error("Error uploading profile image:", error);
+      if (req.file && fs2.existsSync(req.file.path)) {
+        fs2.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  app2.delete("/api/auth/profile/image", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const currentUser = await db.select().from(users).where(eq2(users.id, userId)).limit(1);
+      if (currentUser.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (currentUser[0].profileImageUrl) {
+        const imagePath = path.join(".", currentUser[0].profileImageUrl);
+        if (fs2.existsSync(imagePath)) {
+          fs2.unlinkSync(imagePath);
+        }
+      }
+      const updatedUser = await db.update(users).set({
+        profileImageUrl: null,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq2(users.id, userId)).returning();
+      const { passwordHash, ...userWithoutPassword } = updatedUser[0];
+      res.json({
+        user: userWithoutPassword,
+        message: "Profile image deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting profile image:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
   app2.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
       const userId = req.user.id;
@@ -1073,13 +1220,16 @@ async function registerRoutes(app2) {
     }
   });
   app2.post("/api/patents", requireAuth, upload.array("documents"), async (req, res) => {
+    let patent = null;
     try {
       const userId = req.user.id;
       const patentData = insertPatentSchema.parse({
         ...req.body,
-        userId
+        userId,
+        // Initially set to pending, will update to approved/rejected based on success
+        status: "pending"
       });
-      const patent = await storage.createPatent(patentData);
+      patent = await storage.createPatent(patentData);
       if (req.files && req.files.length > 0) {
         for (const file of req.files) {
           const fileBuffer = fs2.readFileSync(file.path);
@@ -1095,21 +1245,22 @@ async function registerRoutes(app2) {
           });
         }
         try {
+          console.log(`\u{1F517} Attempting to store patent ${patent.id} on Hedera blockchain...`);
           const hederaResult = await hederaService.storePatentHash(patent.id, req.files[0].path);
           await storage.updatePatent(patent.id, {
             hederaTopicId: hederaResult.topicId,
             hederaMessageId: hederaResult.messageId,
+            hederaTransactionId: hederaResult.transactionId,
             hashValue: hederaResult.hash
           });
-          await storage.createBlockchainTransaction({
-            patentId: patent.id,
-            transactionType: "hash_storage",
-            hederaTopicId: hederaResult.topicId,
-            hederaMessageId: hederaResult.messageId,
-            status: "confirmed"
-          });
+          console.log("\u2705 Patent successfully stored on Hedera blockchain:", hederaResult);
         } catch (hederaError) {
-          console.error("Hedera storage error:", hederaError);
+          console.error("\u274C Hedera blockchain storage failed:", hederaError.message);
+          await storage.updatePatent(patent.id, {
+            hashValue: crypto2.createHash("sha256").update(fs2.readFileSync(req.files[0].path)).digest("hex"),
+            hederaError: hederaError.message
+          });
+          console.log("\u26A0\uFE0F  Patent saved without blockchain verification due to Hedera error");
         }
       }
       await storage.createPatentActivity({
@@ -1118,9 +1269,22 @@ async function registerRoutes(app2) {
         activityType: "created",
         description: `Patent "${patent.title}" created`
       });
-      res.status(201).json(patent);
+      const approvedPatent = await storage.updatePatent(patent.id, {
+        status: "approved",
+        approvedAt: /* @__PURE__ */ new Date()
+      });
+      res.status(201).json(approvedPatent);
     } catch (error) {
       console.error("Error creating patent:", error);
+      if (patent?.id) {
+        try {
+          await storage.updatePatent(patent.id, {
+            status: "rejected"
+          });
+        } catch (updateError) {
+          console.error("Error updating patent status to rejected:", updateError);
+        }
+      }
       res.status(500).json({ message: "Failed to create patent" });
     }
   });
@@ -1313,6 +1477,95 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to mint patent NFT" });
     }
   });
+  app2.post("/api/blockchain/verify-ownership", requireAuth, async (req, res) => {
+    try {
+      const { verificationMethod, identifier } = req.body;
+      const userId = req.user.id;
+      let patent = null;
+      if (verificationMethod === "patent_id") {
+        patent = await storage.getPatent(identifier);
+      } else if (verificationMethod === "nft_id") {
+        const patents2 = await storage.getPatentsByUser(userId);
+        patent = patents2.find((p) => p.hederaNftId === identifier);
+      } else if (verificationMethod === "transaction_id") {
+        const patents2 = await storage.getPatentsByUser(userId);
+        patent = patents2.find((p) => p.hederaTransactionId === identifier);
+      }
+      if (!patent) {
+        return res.status(404).json({
+          verified: false,
+          message: "Patent not found with the provided identifier"
+        });
+      }
+      const isOwner = patent.userId === userId;
+      if (!isOwner) {
+        return res.status(403).json({
+          verified: false,
+          message: "You are not the owner of this patent"
+        });
+      }
+      const user = req.user;
+      let blockchainVerification = null;
+      if (patent.hederaTopicId && patent.hederaMessageId && patent.hashValue) {
+        try {
+          blockchainVerification = await hederaService.verifyPatentHash(
+            patent.hederaTopicId,
+            patent.hederaMessageId,
+            patent.hashValue
+          );
+        } catch (error) {
+          console.error("Blockchain verification failed:", error);
+        }
+      }
+      const verificationResults = {
+        verified: true,
+        owner: {
+          id: user.id,
+          name: `${user.firstName} ${user.lastName}`,
+          email: user.email,
+          walletAddress: null
+          // Not implemented yet
+        },
+        patent: {
+          id: patent.id,
+          title: patent.title,
+          status: patent.status,
+          createdAt: patent.createdAt,
+          hederaNftId: patent.hederaNftId,
+          hederaTopicId: patent.hederaTopicId
+        },
+        ownership: {
+          original: true,
+          // Assuming original owner for now
+          royalties: "0%",
+          // Not implemented yet
+          transferHistory: [
+            {
+              type: "Initial Creation",
+              from: "Patent System",
+              to: `${user.firstName} ${user.lastName}`,
+              timestamp: patent.createdAt,
+              status: "Completed"
+            }
+          ]
+        },
+        blockchain: {
+          network: "Hedera Testnet",
+          transactionId: patent.hederaTransactionId || null,
+          timestamp: patent.createdAt,
+          consensus: blockchainVerification?.verified ? "Verified" : "Pending",
+          gasUsed: "0.001"
+        }
+      };
+      res.json(verificationResults);
+    } catch (error) {
+      console.error("Error verifying ownership:", error);
+      res.status(500).json({
+        verified: false,
+        message: "Failed to verify ownership"
+      });
+    }
+  });
   app2.get("/api/documents/user", requireAuth, async (req, res) => {
     try {
       const userId = req.user.id;
@@ -1398,9 +1651,10 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use("/uploads", express.static("uploads"));
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
+  const path2 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -1409,8 +1663,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+    if (path2.startsWith("/api")) {
+      let logLine = `${req.method} ${path2} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -1433,7 +1687,7 @@ if (IS_PRODUCTION) {
   });
 }
 (async () => {
-  const server = await registerRoutes(app);
+  const server = await setupRoutes(app);
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -1442,14 +1696,6 @@ if (IS_PRODUCTION) {
     }
     res.status(status).json({ message });
   });
-  if (IS_PRODUCTION) {
-    const path = __require("path");
-    const staticPath = path.join(__dirname, "../frontend/dist");
-    app.use(express.static(staticPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(staticPath, "index.html"));
-    });
-  }
   const port = parseInt(process.env.PORT || "5000", 10);
   server.listen({
     port,

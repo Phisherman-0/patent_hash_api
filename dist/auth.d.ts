@@ -22,4 +22,5 @@ export declare function register(req: Request, res: Response): Promise<Response<
 export declare function login(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
 export declare function logout(req: Request, res: Response): Promise<void>;
 export declare function getCurrentUser(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
+export declare function updateProfile(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
 //# sourceMappingURL=auth.d.ts.map

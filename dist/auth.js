@@ -144,3 +144,28 @@ export async function getCurrentUser(req, res) {
         res.status(500).json({ message: 'Failed to get user' });
     }
 }
+// Update user profile
+export async function updateProfile(req, res) {
+    try {
+        const { firstName, lastName } = req.body;
+        const userId = req.session?.userId;
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+        const updatedUser = await storage.updateUser(userId, {
+            firstName,
+            lastName,
+            updatedAt: new Date()
+        });
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        // Return user without password
+        const { passwordHash, ...userWithoutPassword } = updatedUser;
+        res.json(userWithoutPassword);
+    }
+    catch (error) {
+        console.error('Error updating profile:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+}

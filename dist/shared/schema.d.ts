@@ -459,6 +459,25 @@ export declare const patents: import("drizzle-orm/pg-core").PgTableWithColumns<{
         }, {}, {
             length: number | undefined;
         }>;
+        hederaTransactionId: import("drizzle-orm/pg-core").PgColumn<{
+            name: "hedera_transaction_id";
+            tableName: "patents";
+            dataType: "string";
+            columnType: "PgVarchar";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         hederaNftId: import("drizzle-orm/pg-core").PgColumn<{
             name: "hedera_nft_id";
             tableName: "patents";
@@ -478,6 +497,23 @@ export declare const patents: import("drizzle-orm/pg-core").PgTableWithColumns<{
         }, {}, {
             length: number | undefined;
         }>;
+        hederaError: import("drizzle-orm/pg-core").PgColumn<{
+            name: "hedera_error";
+            tableName: "patents";
+            dataType: "string";
+            columnType: "PgText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         aiSuggestedCategory: import("drizzle-orm/pg-core").PgColumn<{
             name: "ai_suggested_category";
             tableName: "patents";
@@ -1461,7 +1497,9 @@ export declare const insertPatentSchema: z.ZodObject<Omit<{
     hashValue: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     hederaTopicId: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     hederaMessageId: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    hederaTransactionId: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     hederaNftId: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    hederaError: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     aiSuggestedCategory: z.ZodOptional<z.ZodNullable<z.ZodEnum<["medical_technology", "software_ai", "renewable_energy", "manufacturing", "biotechnology", "automotive", "telecommunications", "other"]>>>;
     aiConfidence: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     estimatedValue: z.ZodOptional<z.ZodNullable<z.ZodString>>;
@@ -1481,7 +1519,9 @@ export declare const insertPatentSchema: z.ZodObject<Omit<{
     hashValue?: string | null | undefined;
     hederaTopicId?: string | null | undefined;
     hederaMessageId?: string | null | undefined;
+    hederaTransactionId?: string | null | undefined;
     hederaNftId?: string | null | undefined;
+    hederaError?: string | null | undefined;
     aiSuggestedCategory?: "medical_technology" | "software_ai" | "renewable_energy" | "manufacturing" | "biotechnology" | "automotive" | "telecommunications" | "other" | null | undefined;
     aiConfidence?: string | null | undefined;
     estimatedValue?: string | null | undefined;
@@ -1499,7 +1539,9 @@ export declare const insertPatentSchema: z.ZodObject<Omit<{
     hashValue?: string | null | undefined;
     hederaTopicId?: string | null | undefined;
     hederaMessageId?: string | null | undefined;
+    hederaTransactionId?: string | null | undefined;
     hederaNftId?: string | null | undefined;
+    hederaError?: string | null | undefined;
     aiSuggestedCategory?: "medical_technology" | "software_ai" | "renewable_energy" | "manufacturing" | "biotechnology" | "automotive" | "telecommunications" | "other" | null | undefined;
     aiConfidence?: string | null | undefined;
     estimatedValue?: string | null | undefined;

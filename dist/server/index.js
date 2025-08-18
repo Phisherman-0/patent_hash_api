@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from "express";
 import cors from "cors";
-import { registerRoutes } from "../routes.js";
+import { setupRoutes } from "../routes.js";
 const app = express();
 // CORS configuration for frontend
 const corsOptions = {
@@ -46,7 +46,7 @@ app.use((req, res, next) => {
     next();
 });
 (async () => {
-    const server = await registerRoutes(app);
+    const server = await setupRoutes(app);
     // Error handling middleware
     app.use((err, _req, res, _next) => {
         const status = err.status || err.statusCode || 500;

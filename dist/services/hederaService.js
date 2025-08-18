@@ -15,29 +15,51 @@ class HederaService {
         }
         try {
             this.operatorId = AccountId.fromString(accountId);
-            this.operatorKey = PrivateKey.fromString(privateKey);
+            // Handle different private key formats
+            if (privateKey.startsWith('0x')) {
+                // Use fromStringECDSA with the full 0x prefix (this is what works!)
+                this.operatorKey = PrivateKey.fromStringECDSA(privateKey);
+            }
+            else if (privateKey.length === 64) {
+                // Raw hex string without 0x prefix
+                this.operatorKey = PrivateKey.fromStringECDSA(privateKey);
+            }
+            else {
+                // DER or other format
+                this.operatorKey = PrivateKey.fromString(privateKey);
+            }
             this.client = Client.forTestnet();
             this.client.setOperator(this.operatorId, this.operatorKey);
+            console.log(`✅ Hedera client initialized for account: ${this.operatorId.toString()}`);
+            console.log(`🔑 Private key format: ${privateKey.startsWith('0x') ? 'ECDSA with 0x prefix' : 'Other format'}`);
+            console.log(`🔑 Key length: ${privateKey.length} characters`);
         }
         catch (error) {
             console.error("Failed to initialize Hedera client:", error);
+            this.client = null;
+            this.operatorId = null;
+            this.operatorKey = null;
         }
     }
     async storePatentHash(patentId, filePath) {
-        if (!this.client) {
-            throw new Error("Hedera client not initialized");
+        if (!this.client || !this.operatorKey) {
+            throw new Error("Hedera client not initialized - check credentials and network connection");
         }
         try {
             // Calculate file hash
             const fileBuffer = fs.readFileSync(filePath);
             const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+            console.log(`📝 Calculated hash for patent ${patentId}: ${hash}`);
             // Create a new topic for this patent if needed
+            console.log(`🔗 Creating Hedera topic for patent ${patentId}...`);
             const topicCreateTx = new TopicCreateTransaction()
                 .setTopicMemo(`Patent Hash Storage for ${patentId}`)
-                .setSubmitKey(this.operatorKey);
+                .setSubmitKey(this.operatorKey)
+                .setMaxTransactionFee(200000000); // 2 HBAR max fee
             const topicCreateSubmit = await topicCreateTx.execute(this.client);
             const topicCreateReceipt = await topicCreateSubmit.getReceipt(this.client);
             const topicId = topicCreateReceipt.topicId;
+            console.log(`✅ Topic created: ${topicId.toString()}`);
             // Submit patent hash to the topic
             const patentData = {
                 patentId,
@@ -45,21 +67,37 @@ class HederaService {
                 timestamp: new Date().toISOString(),
                 action: "patent_hash_storage"
             };
+            console.log(`📤 Submitting patent data to topic...`);
             const topicMessageTx = new TopicMessageSubmitTransaction()
                 .setTopicId(topicId)
-                .setMessage(JSON.stringify(patentData));
+                .setMessage(JSON.stringify(patentData))
+                .setMaxTransactionFee(100000000); // 1 HBAR max fee
             const topicMessageSubmit = await topicMessageTx.execute(this.client);
             const topicMessageReceipt = await topicMessageSubmit.getReceipt(this.client);
-            return {
+            const result = {
                 topicId: topicId.toString(),
                 messageId: topicMessageReceipt.topicSequenceNumber?.toString() || "",
                 hash,
                 transactionId: topicMessageSubmit.transactionId.toString(),
             };
+            console.log(`✅ Patent hash stored on Hedera blockchain:`, result);
+            return result;
         }
         catch (error) {
             console.error("Error storing patent hash on Hedera:", error);
-            throw new Error("Failed to store patent hash on blockchain");
+            // Provide more specific error messages
+            if (error.message?.includes('INVALID_SIGNATURE')) {
+                throw new Error("Invalid Hedera credentials - private key doesn't match account ID");
+            }
+            else if (error.message?.includes('INSUFFICIENT_PAYER_BALANCE')) {
+                throw new Error("Insufficient HBAR balance for blockchain transaction");
+            }
+            else if (error.message?.includes('TRANSACTION_EXPIRED')) {
+                throw new Error("Blockchain transaction expired - network may be congested");
+            }
+            else {
+                throw new Error(`Failed to store patent hash on blockchain: ${error.message || 'Unknown error'}`);
+            }
         }
     }
     async verifyPatentHash(topicId, messageId, expectedHash) {
