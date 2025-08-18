@@ -8,7 +8,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
 
 // Environment-based configuration
-const FRONTEND_URL = process.env.FRONTEND_URL || (IS_PRODUCTION ? 'https://your-production-domain.com' : 'http://localhost:3000');
+const FRONTEND_URL = process.env.FRONTEND_URL || (IS_PRODUCTION ? 'https://patent-hash-webapp.vercel.app' : 'http://localhost:3000');
 
 // CORS configuration - dynamic based on environment
 const corsOrigins = IS_PRODUCTION 

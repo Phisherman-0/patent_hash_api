@@ -1638,7 +1638,7 @@ async function setupRoutes(app2) {
 var app = express();
 var NODE_ENV = process.env.NODE_ENV || "development";
 var IS_PRODUCTION = NODE_ENV === "production";
-var FRONTEND_URL = process.env.FRONTEND_URL || (IS_PRODUCTION ? "https://your-production-domain.com" : "http://localhost:3000");
+var FRONTEND_URL = process.env.FRONTEND_URL || (IS_PRODUCTION ? "https://patent-hash-webapp.vercel.app" : "http://localhost:3000");
 var corsOrigins = IS_PRODUCTION ? [FRONTEND_URL] : [
   "http://localhost:3000",
   "http://localhost:3001",
