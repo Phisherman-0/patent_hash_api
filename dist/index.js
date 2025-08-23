@@ -1720,7 +1720,7 @@ async function setupRoutes(app2) {
     try {
       const { verificationMethod, identifier } = req.body;
       const userId = req.user.id;
-      let patent = null;
+      let patent = void 0;
       if (verificationMethod === "patent_id") {
         patent = await storage.getPatent(identifier);
       } else if (verificationMethod === "nft_id") {
@@ -1896,9 +1896,9 @@ app.use((req, res, next) => {
   const path2 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
-  res.json = function(bodyJson, ...args) {
+  res.json = function(bodyJson) {
     capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
+    return originalResJson.call(this, bodyJson);
   };
   res.on("finish", () => {
     const duration = Date.now() - start;

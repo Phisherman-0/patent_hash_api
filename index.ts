@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { setupRoutes } from './routes';
+import { DatabaseStorage } from './storage';
+import dotenv from 'dotenv';
 
 const app = express();
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -31,15 +33,15 @@ app.use(express.urlencoded({ extended: false }));
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
 
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
+  res.json = function (bodyJson: any) {
     capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
+    return originalResJson.call(this, bodyJson);
   };
 
   res.on("finish", () => {

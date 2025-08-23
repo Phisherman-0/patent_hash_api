@@ -722,7 +722,7 @@ export async function setupRoutes(app) {
         try {
             const { verificationMethod, identifier } = req.body;
             const userId = req.user.id;
-            let patent = null;
+            let patent = undefined;
             // Find patent based on verification method
             if (verificationMethod === 'patent_id') {
                 patent = await storage.getPatent(identifier);
@@ -753,7 +753,7 @@ export async function setupRoutes(app) {
             }
             // Get user information
             const user = req.user;
-            // Verify on blockchain if Hedera data exists
+            // Verify blockchain data if available
             let blockchainVerification = null;
             if (patent.hederaTopicId && patent.hederaMessageId && patent.hashValue) {
                 try {

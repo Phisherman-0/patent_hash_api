@@ -1,4 +1,4 @@
-import { Express } from 'express';
+import { Express, Request, Response } from 'express';
 import { Server } from 'http';
 import { createServer } from 'http';
 import multer from 'multer';
@@ -9,6 +9,7 @@ import { storage } from './storage';
 import { requireAuth, register, login, logout, getCurrentUser } from './auth';
 import { aiService } from './services/aiService';
 import { hederaService } from './services/hederaService';
+import { Patent } from './shared/schema';
 import { pool } from './db';
 import { insertPatentSchema } from './shared/schema';
 import { db } from './db';
@@ -828,7 +829,7 @@ export async function setupRoutes(app: Express): Promise<Server> {
       const { verificationMethod, identifier } = req.body;
       const userId = req.user.id;
 
-      let patent = null;
+      let patent: Patent | undefined = undefined;
       
       // Find patent based on verification method
       if (verificationMethod === 'patent_id') {
@@ -863,8 +864,8 @@ export async function setupRoutes(app: Express): Promise<Server> {
       // Get user information
       const user = req.user;
 
-      // Verify on blockchain if Hedera data exists
-      let blockchainVerification = null;
+      // Verify blockchain data if available
+      let blockchainVerification: any = null;
       if (patent.hederaTopicId && patent.hederaMessageId && patent.hashValue) {
         try {
           blockchainVerification = await hederaService.verifyPatentHash(
