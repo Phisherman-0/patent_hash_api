@@ -14,7 +14,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || (IS_PRODUCTION ? 'https://paten
 
 // CORS configuration - dynamic based on environment
 const corsOrigins = IS_PRODUCTION 
-  ? [FRONTEND_URL]
+  ? [FRONTEND_URL, 'https://patent-hash-webapp.vercel.app']
   : [
       'http://localhost:3000',
       'http://localhost:3001', 
@@ -24,7 +24,10 @@ const corsOrigins = IS_PRODUCTION
 
 app.use(cors({
   origin: corsOrigins,
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  exposedHeaders: ['Set-Cookie']
 }));
 
 app.use(express.json());

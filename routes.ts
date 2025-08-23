@@ -92,7 +92,7 @@ export async function setupRoutes(app: Express): Promise<Server> {
       secure: IS_PRODUCTION, // HTTPS only in production
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      sameSite: IS_PRODUCTION ? 'strict' : 'lax'
+      sameSite: IS_PRODUCTION ? 'none' : 'lax' // 'none' required for cross-origin in production
     }
   }));
 
