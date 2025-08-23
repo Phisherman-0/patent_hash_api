@@ -1,29 +1,61 @@
-import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity, } from "@shared/schema";
-import { db } from "./db";
+import { db } from './db';
+import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity } from './shared/schema';
 import { eq, desc, and, ilike, sql } from "drizzle-orm";
 export class DatabaseStorage {
     // User operations (IMPORTANT: mandatory for Replit Auth)
     async getUser(id) {
         const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-        return result[0];
+        const user = result[0];
+        if (!user)
+            return undefined;
+        return {
+            ...user,
+            settings: user.settings
+        };
     }
     async getUserById(id) {
         return this.getUser(id);
     }
     async createUser(userData) {
         const [user] = await db.insert(users).values(userData).returning();
-        return user;
+        return {
+            ...user,
+            settings: user.settings
+        };
     }
     async getUserByEmail(email) {
-        const [user] = await db.select().from(users).where(eq(users.email, email));
-        return user;
+        const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        if (!user)
+            return undefined;
+        return {
+            ...user,
+            settings: user.settings
+        };
     }
-    async updateUser(id, updates) {
-        const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-        return user;
+    async updateUser(id, userData) {
+        const [user] = await db.update(users).set(userData).where(eq(users.id, id)).returning();
+        if (!user)
+            return undefined;
+        return {
+            ...user,
+            settings: user.settings
+        };
     }
-    async updateUserSettings(id, settings) {
-        await db.update(users).set({ settings }).where(eq(users.id, id));
+    async updateUserSettings(userId, settings) {
+        const user = await this.getUserById(userId);
+        if (!user)
+            return undefined;
+        const updatedSettings = { ...user.settings, ...settings };
+        const [updatedUser] = await db.update(users)
+            .set({ settings: updatedSettings })
+            .where(eq(users.id, userId))
+            .returning();
+        if (!updatedUser)
+            return undefined;
+        return {
+            ...updatedUser,
+            settings: updatedUser.settings
+        };
     }
     async deleteUser(id) {
         await db.delete(users).where(eq(users.id, id));
@@ -40,7 +72,10 @@ export class DatabaseStorage {
             },
         })
             .returning();
-        return user;
+        return {
+            ...user,
+            settings: user.settings
+        };
     }
     // Patent operations
     async createPatent(patent) {

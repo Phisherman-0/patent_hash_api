@@ -1,6 +1,6 @@
-import { Client, TopicCreateTransaction, TopicMessageSubmitTransaction, TopicInfoQuery, TopicId, AccountId, PrivateKey, TokenCreateTransaction, TokenMintTransaction, TokenType, TokenSupplyType } from "@hashgraph/sdk";
-import crypto from "crypto";
-import fs from "fs";
+import { Client, AccountId, PrivateKey, TopicCreateTransaction, TopicMessageSubmitTransaction, TokenCreateTransaction, TokenType, TokenSupplyType, TokenMintTransaction, AccountBalanceQuery, TopicInfoQuery, TopicId } from "@hashgraph/sdk";
+import crypto from 'crypto';
+import fs from 'fs';
 class HederaService {
     client = null;
     operatorId = null;
@@ -41,10 +41,75 @@ class HederaService {
             this.operatorKey = null;
         }
     }
+    async validateWallet(accountId, privateKey, network) {
+        try {
+            // Parse account ID
+            const parsedAccountId = AccountId.fromString(accountId);
+            // Parse private key
+            let parsedPrivateKey;
+            if (privateKey.startsWith('0x')) {
+                parsedPrivateKey = PrivateKey.fromStringECDSA(privateKey);
+            }
+            else if (privateKey.length === 64) {
+                parsedPrivateKey = PrivateKey.fromStringECDSA(privateKey);
+            }
+            else {
+                parsedPrivateKey = PrivateKey.fromString(privateKey);
+            }
+            // Create client for the specified network
+            const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();
+            client.setOperator(parsedAccountId, parsedPrivateKey);
+            // Test the connection by querying account balance
+            const accountBalanceQuery = new AccountBalanceQuery()
+                .setAccountId(parsedAccountId);
+            const balance = await accountBalanceQuery.execute(client);
+            client.close();
+            return {
+                isValid: true,
+                balance: balance.hbars.toString()
+            };
+        }
+        catch (error) {
+            console.error('Wallet validation failed:', error);
+            return {
+                isValid: false,
+                error: error.message || 'Invalid wallet credentials'
+            };
+        }
+    }
+    async storePatentHashWithWallet(patentId, filePath, walletConfig) {
+        // Create a temporary client with user's wallet configuration
+        let tempClient = null;
+        try {
+            const operatorId = AccountId.fromString(walletConfig.accountId);
+            let operatorKey;
+            // Handle different private key formats
+            if (walletConfig.privateKey.startsWith('0x')) {
+                operatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+            }
+            else if (walletConfig.privateKey.length === 64) {
+                operatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+            }
+            else {
+                operatorKey = PrivateKey.fromString(walletConfig.privateKey);
+            }
+            tempClient = walletConfig.network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();
+            tempClient.setOperator(operatorId, operatorKey);
+            return await this.executePatentHashStorage(patentId, filePath, tempClient, operatorKey);
+        }
+        finally {
+            if (tempClient) {
+                tempClient.close();
+            }
+        }
+    }
     async storePatentHash(patentId, filePath) {
         if (!this.client || !this.operatorKey) {
             throw new Error("Hedera client not initialized - check credentials and network connection");
         }
+        return await this.executePatentHashStorage(patentId, filePath, this.client, this.operatorKey);
+    }
+    async executePatentHashStorage(patentId, filePath, client, operatorKey) {
         try {
             // Calculate file hash
             const fileBuffer = fs.readFileSync(filePath);
@@ -54,10 +119,10 @@ class HederaService {
             console.log(`🔗 Creating Hedera topic for patent ${patentId}...`);
             const topicCreateTx = new TopicCreateTransaction()
                 .setTopicMemo(`Patent Hash Storage for ${patentId}`)
-                .setSubmitKey(this.operatorKey)
+                .setSubmitKey(operatorKey)
                 .setMaxTransactionFee(200000000); // 2 HBAR max fee
-            const topicCreateSubmit = await topicCreateTx.execute(this.client);
-            const topicCreateReceipt = await topicCreateSubmit.getReceipt(this.client);
+            const topicCreateSubmit = await topicCreateTx.execute(client);
+            const topicCreateReceipt = await topicCreateSubmit.getReceipt(client);
             const topicId = topicCreateReceipt.topicId;
             console.log(`✅ Topic created: ${topicId.toString()}`);
             // Submit patent hash to the topic
@@ -72,8 +137,8 @@ class HederaService {
                 .setTopicId(topicId)
                 .setMessage(JSON.stringify(patentData))
                 .setMaxTransactionFee(100000000); // 1 HBAR max fee
-            const topicMessageSubmit = await topicMessageTx.execute(this.client);
-            const topicMessageReceipt = await topicMessageSubmit.getReceipt(this.client);
+            const topicMessageSubmit = await topicMessageTx.execute(client);
+            const topicMessageReceipt = await topicMessageSubmit.getReceipt(client);
             const result = {
                 topicId: topicId.toString(),
                 messageId: topicMessageReceipt.topicSequenceNumber?.toString() || "",
@@ -126,10 +191,40 @@ class HederaService {
             };
         }
     }
-    async mintPatentNFT(patent) {
-        if (!this.client) {
+    async mintPatentNFT(patent, walletConfig) {
+        // Create a temporary client with user's wallet configuration if provided
+        let tempClient = null;
+        let tempOperatorId = null;
+        let tempOperatorKey = null;
+        if (walletConfig) {
+            try {
+                tempOperatorId = AccountId.fromString(walletConfig.accountId);
+                // Handle different private key formats
+                if (walletConfig.privateKey.startsWith('0x')) {
+                    tempOperatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+                }
+                else if (walletConfig.privateKey.length === 64) {
+                    tempOperatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+                }
+                else {
+                    tempOperatorKey = PrivateKey.fromString(walletConfig.privateKey);
+                }
+                tempClient = walletConfig.network === 'mainnet' ? Client.forMainnet() : Client.forTestnet();
+                tempClient.setOperator(tempOperatorId, tempOperatorKey);
+            }
+            catch (error) {
+                console.error("Failed to initialize temporary client:", error);
+                throw new Error("Failed to initialize Hedera client with wallet configuration");
+            }
+        }
+        const client = tempClient || this.client;
+        const operatorId = tempOperatorId || this.operatorId;
+        const operatorKey = tempOperatorKey || this.operatorKey;
+        if (!client || !operatorId || !operatorKey) {
             throw new Error("Hedera client not initialized");
         }
+        // Type assertion to fix TypeScript issues
+        const hederaClient = client;
         try {
             // Create NFT token for the patent
             const tokenCreateTx = new TokenCreateTransaction()
@@ -138,25 +233,38 @@ class HederaService {
                 .setTokenType(TokenType.NonFungibleUnique) // NFT
                 .setSupplyType(TokenSupplyType.Finite) // Finite
                 .setMaxSupply(1)
-                .setTreasuryAccountId(this.operatorId)
-                .setSupplyKey(this.operatorKey)
-                .setAdminKey(this.operatorKey);
-            const tokenCreateSubmit = await tokenCreateTx.execute(this.client);
-            const tokenCreateReceipt = await tokenCreateSubmit.getReceipt(this.client);
+                .setTreasuryAccountId(operatorId)
+                .setSupplyKey(operatorKey)
+                .setAdminKey(operatorKey);
+            const tokenCreateSubmit = await tokenCreateTx.execute(hederaClient);
+            const tokenCreateReceipt = await tokenCreateSubmit.getReceipt(hederaClient);
             const tokenId = tokenCreateReceipt.tokenId;
-            // Mint the NFT
+            // Create compact NFT metadata within Hedera limits
             const nftMetadata = JSON.stringify({
-                patentId: patent.id,
-                title: patent.title,
-                description: patent.description,
-                category: patent.category,
-                timestamp: new Date().toISOString(),
+                name: `Patent: ${patent.title.substring(0, 30)}${patent.title.length > 30 ? '...' : ''}`,
+                description: `Patent NFT on Hedera blockchain`,
+                image: `https://api.dicebear.com/7.x/shapes/svg?seed=${patent.id}&scale=80`,
+                attributes: [
+                    {
+                        trait_type: "Category",
+                        value: patent.category
+                    },
+                    {
+                        trait_type: "Network",
+                        value: walletConfig?.network || "testnet"
+                    },
+                    {
+                        trait_type: "Status",
+                        value: "Filed"
+                    }
+                ],
+                patentId: patent.id
             });
             const tokenMintTx = new TokenMintTransaction()
                 .setTokenId(tokenId)
                 .setMetadata([Buffer.from(nftMetadata)]);
-            const tokenMintSubmit = await tokenMintTx.execute(this.client);
-            const tokenMintReceipt = await tokenMintSubmit.getReceipt(this.client);
+            const tokenMintSubmit = await tokenMintTx.execute(hederaClient);
+            const tokenMintReceipt = await tokenMintSubmit.getReceipt(hederaClient);
             return {
                 nftId: `${tokenId.toString()}-${tokenMintReceipt.serials[0]}`,
                 transactionId: tokenMintSubmit.transactionId.toString(),
@@ -166,6 +274,12 @@ class HederaService {
         catch (error) {
             console.error("Error minting patent NFT:", error);
             throw new Error("Failed to mint patent NFT");
+        }
+        finally {
+            // Clean up temporary client if created
+            if (tempClient) {
+                tempClient.close();
+            }
         }
     }
     async transferPatentNFT(tokenId, serial, fromAccountId, toAccountId) {

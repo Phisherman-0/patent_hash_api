@@ -2,18 +2,11 @@ import 'dotenv/config';
 import express from "express";
 import cors from "cors";
 import { setupRoutes } from "../routes.js";
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const app = express();
 // CORS configuration for frontend
 const corsOptions = {
-    origin: [
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-        'https://patent-hash-webapp.vercel.app',
-        'http://localhost:3001',
-        'http://localhost:3002',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001',
-        'http://127.0.0.1:3002'
-    ],
+    origin: IS_PRODUCTION ? process.env.FRONTEND_URL || false : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
@@ -78,6 +71,6 @@ app.use((req, res, next) => {
         reusePort: true,
     }, () => {
         console.log(`[backend] serving on port ${port}`);
-        console.log(`[backend] CORS enabled for: ${corsOptions.origin}`);
+        console.log(`🌐 CORS configured for: ${IS_PRODUCTION ? process.env.FRONTEND_URL || 'production domain' : 'all origins (development)'}`);
     });
 })();

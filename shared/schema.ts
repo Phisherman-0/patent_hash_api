@@ -210,10 +210,25 @@ export const patentActivityRelations = relations(patentActivity, ({ one }) => ({
   }),
 }));
 
+// Wallet configuration interface
+export interface WalletConfig {
+  accountId: string;
+  privateKey: string;
+  network: 'testnet' | 'mainnet';
+}
+
+// User settings interface
+export interface UserSettings {
+  walletConfig?: WalletConfig;
+  [key: string]: any; // Allow other settings
+}
+
 // Schema types
 export type InsertUser = typeof users.$inferInsert;
 export type UpsertUser = typeof users.$inferInsert;
-export type User = typeof users.$inferSelect;
+export type User = typeof users.$inferSelect & {
+  settings?: UserSettings;
+};
 
 export type InsertPatent = typeof patents.$inferInsert;
 export type Patent = typeof patents.$inferSelect;

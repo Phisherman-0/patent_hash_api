@@ -16,6 +16,10 @@ import path from "path";
 import fs2 from "fs";
 import crypto2 from "crypto";
 
+// db.ts
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+
 // shared/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
@@ -243,8 +247,6 @@ var insertAIAnalysisSchema = createInsertSchema(aiAnalysis).omit({
 });
 
 // db.ts
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
 if (!process.env.DATABASE_URL) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?"
@@ -268,25 +270,49 @@ var DatabaseStorage = class {
   // User operations (IMPORTANT: mandatory for Replit Auth)
   async getUser(id) {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
+    const user = result[0];
+    if (!user) return void 0;
+    return {
+      ...user,
+      settings: user.settings
+    };
   }
   async getUserById(id) {
     return this.getUser(id);
   }
   async createUser(userData) {
     const [user] = await db.insert(users).values(userData).returning();
-    return user;
+    return {
+      ...user,
+      settings: user.settings
+    };
   }
   async getUserByEmail(email) {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (!user) return void 0;
+    return {
+      ...user,
+      settings: user.settings
+    };
   }
-  async updateUser(id, updates) {
-    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    return user;
+  async updateUser(id, userData) {
+    const [user] = await db.update(users).set(userData).where(eq(users.id, id)).returning();
+    if (!user) return void 0;
+    return {
+      ...user,
+      settings: user.settings
+    };
   }
-  async updateUserSettings(id, settings) {
-    await db.update(users).set({ settings }).where(eq(users.id, id));
+  async updateUserSettings(userId, settings) {
+    const user = await this.getUserById(userId);
+    if (!user) return void 0;
+    const updatedSettings = { ...user.settings, ...settings };
+    const [updatedUser] = await db.update(users).set({ settings: updatedSettings }).where(eq(users.id, userId)).returning();
+    if (!updatedUser) return void 0;
+    return {
+      ...updatedUser,
+      settings: updatedUser.settings
+    };
   }
   async deleteUser(id) {
     await db.delete(users).where(eq(users.id, id));
@@ -299,7 +325,10 @@ var DatabaseStorage = class {
         updatedAt: /* @__PURE__ */ new Date()
       }
     }).returning();
-    return user;
+    return {
+      ...user,
+      settings: user.settings
+    };
   }
   // Patent operations
   async createPatent(patent) {
@@ -831,7 +860,7 @@ ${prompt}`;
 var aiService = new AIService();
 
 // services/hederaService.ts
-import { Client, TopicCreateTransaction, TopicMessageSubmitTransaction, TopicInfoQuery, TopicId, AccountId, PrivateKey, TokenCreateTransaction, TokenMintTransaction, TokenType, TokenSupplyType } from "@hashgraph/sdk";
+import { Client, AccountId, PrivateKey, TopicCreateTransaction, TopicMessageSubmitTransaction, TokenCreateTransaction, TokenType, TokenSupplyType, TokenMintTransaction, AccountBalanceQuery, TopicInfoQuery, TopicId } from "@hashgraph/sdk";
 import crypto from "crypto";
 import fs from "fs";
 var HederaService = class {
@@ -866,18 +895,70 @@ var HederaService = class {
       this.operatorKey = null;
     }
   }
+  async validateWallet(accountId, privateKey, network) {
+    try {
+      const parsedAccountId = AccountId.fromString(accountId);
+      let parsedPrivateKey;
+      if (privateKey.startsWith("0x")) {
+        parsedPrivateKey = PrivateKey.fromStringECDSA(privateKey);
+      } else if (privateKey.length === 64) {
+        parsedPrivateKey = PrivateKey.fromStringECDSA(privateKey);
+      } else {
+        parsedPrivateKey = PrivateKey.fromString(privateKey);
+      }
+      const client = network === "mainnet" ? Client.forMainnet() : Client.forTestnet();
+      client.setOperator(parsedAccountId, parsedPrivateKey);
+      const accountBalanceQuery = new AccountBalanceQuery().setAccountId(parsedAccountId);
+      const balance = await accountBalanceQuery.execute(client);
+      client.close();
+      return {
+        isValid: true,
+        balance: balance.hbars.toString()
+      };
+    } catch (error) {
+      console.error("Wallet validation failed:", error);
+      return {
+        isValid: false,
+        error: error.message || "Invalid wallet credentials"
+      };
+    }
+  }
+  async storePatentHashWithWallet(patentId, filePath, walletConfig) {
+    let tempClient = null;
+    try {
+      const operatorId = AccountId.fromString(walletConfig.accountId);
+      let operatorKey;
+      if (walletConfig.privateKey.startsWith("0x")) {
+        operatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+      } else if (walletConfig.privateKey.length === 64) {
+        operatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+      } else {
+        operatorKey = PrivateKey.fromString(walletConfig.privateKey);
+      }
+      tempClient = walletConfig.network === "mainnet" ? Client.forMainnet() : Client.forTestnet();
+      tempClient.setOperator(operatorId, operatorKey);
+      return await this.executePatentHashStorage(patentId, filePath, tempClient, operatorKey);
+    } finally {
+      if (tempClient) {
+        tempClient.close();
+      }
+    }
+  }
   async storePatentHash(patentId, filePath) {
     if (!this.client || !this.operatorKey) {
       throw new Error("Hedera client not initialized - check credentials and network connection");
     }
+    return await this.executePatentHashStorage(patentId, filePath, this.client, this.operatorKey);
+  }
+  async executePatentHashStorage(patentId, filePath, client, operatorKey) {
     try {
       const fileBuffer = fs.readFileSync(filePath);
       const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
       console.log(`\u{1F4DD} Calculated hash for patent ${patentId}: ${hash}`);
       console.log(`\u{1F517} Creating Hedera topic for patent ${patentId}...`);
-      const topicCreateTx = new TopicCreateTransaction().setTopicMemo(`Patent Hash Storage for ${patentId}`).setSubmitKey(this.operatorKey).setMaxTransactionFee(2e8);
-      const topicCreateSubmit = await topicCreateTx.execute(this.client);
-      const topicCreateReceipt = await topicCreateSubmit.getReceipt(this.client);
+      const topicCreateTx = new TopicCreateTransaction().setTopicMemo(`Patent Hash Storage for ${patentId}`).setSubmitKey(operatorKey).setMaxTransactionFee(2e8);
+      const topicCreateSubmit = await topicCreateTx.execute(client);
+      const topicCreateReceipt = await topicCreateSubmit.getReceipt(client);
       const topicId = topicCreateReceipt.topicId;
       console.log(`\u2705 Topic created: ${topicId.toString()}`);
       const patentData = {
@@ -888,8 +969,8 @@ var HederaService = class {
       };
       console.log(`\u{1F4E4} Submitting patent data to topic...`);
       const topicMessageTx = new TopicMessageSubmitTransaction().setTopicId(topicId).setMessage(JSON.stringify(patentData)).setMaxTransactionFee(1e8);
-      const topicMessageSubmit = await topicMessageTx.execute(this.client);
-      const topicMessageReceipt = await topicMessageSubmit.getReceipt(this.client);
+      const topicMessageSubmit = await topicMessageTx.execute(client);
+      const topicMessageReceipt = await topicMessageSubmit.getReceipt(client);
       const result = {
         topicId: topicId.toString(),
         messageId: topicMessageReceipt.topicSequenceNumber?.toString() || "",
@@ -932,25 +1013,62 @@ var HederaService = class {
       };
     }
   }
-  async mintPatentNFT(patent) {
-    if (!this.client) {
+  async mintPatentNFT(patent, walletConfig) {
+    let tempClient = null;
+    let tempOperatorId = null;
+    let tempOperatorKey = null;
+    if (walletConfig) {
+      try {
+        tempOperatorId = AccountId.fromString(walletConfig.accountId);
+        if (walletConfig.privateKey.startsWith("0x")) {
+          tempOperatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+        } else if (walletConfig.privateKey.length === 64) {
+          tempOperatorKey = PrivateKey.fromStringECDSA(walletConfig.privateKey);
+        } else {
+          tempOperatorKey = PrivateKey.fromString(walletConfig.privateKey);
+        }
+        tempClient = walletConfig.network === "mainnet" ? Client.forMainnet() : Client.forTestnet();
+        tempClient.setOperator(tempOperatorId, tempOperatorKey);
+      } catch (error) {
+        console.error("Failed to initialize temporary client:", error);
+        throw new Error("Failed to initialize Hedera client with wallet configuration");
+      }
+    }
+    const client = tempClient || this.client;
+    const operatorId = tempOperatorId || this.operatorId;
+    const operatorKey = tempOperatorKey || this.operatorKey;
+    if (!client || !operatorId || !operatorKey) {
       throw new Error("Hedera client not initialized");
     }
+    const hederaClient = client;
     try {
-      const tokenCreateTx = new TokenCreateTransaction().setTokenName(`Patent: ${patent.title}`).setTokenSymbol("PATENT").setTokenType(TokenType.NonFungibleUnique).setSupplyType(TokenSupplyType.Finite).setMaxSupply(1).setTreasuryAccountId(this.operatorId).setSupplyKey(this.operatorKey).setAdminKey(this.operatorKey);
-      const tokenCreateSubmit = await tokenCreateTx.execute(this.client);
-      const tokenCreateReceipt = await tokenCreateSubmit.getReceipt(this.client);
+      const tokenCreateTx = new TokenCreateTransaction().setTokenName(`Patent: ${patent.title}`).setTokenSymbol("PATENT").setTokenType(TokenType.NonFungibleUnique).setSupplyType(TokenSupplyType.Finite).setMaxSupply(1).setTreasuryAccountId(operatorId).setSupplyKey(operatorKey).setAdminKey(operatorKey);
+      const tokenCreateSubmit = await tokenCreateTx.execute(hederaClient);
+      const tokenCreateReceipt = await tokenCreateSubmit.getReceipt(hederaClient);
       const tokenId = tokenCreateReceipt.tokenId;
       const nftMetadata = JSON.stringify({
-        patentId: patent.id,
-        title: patent.title,
-        description: patent.description,
-        category: patent.category,
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        name: `Patent: ${patent.title.substring(0, 30)}${patent.title.length > 30 ? "..." : ""}`,
+        description: `Patent NFT on Hedera blockchain`,
+        image: `https://api.dicebear.com/7.x/shapes/svg?seed=${patent.id}&scale=80`,
+        attributes: [
+          {
+            trait_type: "Category",
+            value: patent.category
+          },
+          {
+            trait_type: "Network",
+            value: walletConfig?.network || "testnet"
+          },
+          {
+            trait_type: "Status",
+            value: "Filed"
+          }
+        ],
+        patentId: patent.id
       });
       const tokenMintTx = new TokenMintTransaction().setTokenId(tokenId).setMetadata([Buffer.from(nftMetadata)]);
-      const tokenMintSubmit = await tokenMintTx.execute(this.client);
-      const tokenMintReceipt = await tokenMintSubmit.getReceipt(this.client);
+      const tokenMintSubmit = await tokenMintTx.execute(hederaClient);
+      const tokenMintReceipt = await tokenMintSubmit.getReceipt(hederaClient);
       return {
         nftId: `${tokenId.toString()}-${tokenMintReceipt.serials[0]}`,
         transactionId: tokenMintSubmit.transactionId.toString(),
@@ -959,6 +1077,10 @@ var HederaService = class {
     } catch (error) {
       console.error("Error minting patent NFT:", error);
       throw new Error("Failed to mint patent NFT");
+    } finally {
+      if (tempClient) {
+        tempClient.close();
+      }
     }
   }
   async transferPatentNFT(tokenId, serial, fromAccountId, toAccountId) {
@@ -983,7 +1105,7 @@ import { eq as eq2 } from "drizzle-orm";
 var upload = multer({
   dest: "uploads/",
   limits: {
-    fileSize: 50 * 1024 * 1024
+    fileSize: 20 * 1024 * 1024
     // 50MB limit
   }
 });
@@ -1223,6 +1345,14 @@ async function setupRoutes(app2) {
     let patent = null;
     try {
       const userId = req.user.id;
+      const user = await storage.getUserById(userId);
+      const walletConfig = user?.settings?.walletConfig;
+      if (!walletConfig) {
+        return res.status(400).json({
+          message: "Wallet connection required for patent filing. Please configure your wallet in settings.",
+          requiresWallet: true
+        });
+      }
       const patentData = insertPatentSchema.parse({
         ...req.body,
         userId,
@@ -1246,14 +1376,24 @@ async function setupRoutes(app2) {
         }
         try {
           console.log(`\u{1F517} Attempting to store patent ${patent.id} on Hedera blockchain...`);
-          const hederaResult = await hederaService.storePatentHash(patent.id, req.files[0].path);
-          await storage.updatePatent(patent.id, {
-            hederaTopicId: hederaResult.topicId,
-            hederaMessageId: hederaResult.messageId,
-            hederaTransactionId: hederaResult.transactionId,
-            hashValue: hederaResult.hash
-          });
-          console.log("\u2705 Patent successfully stored on Hedera blockchain:", hederaResult);
+          const user2 = await storage.getUserById(userId);
+          const walletConfig2 = user2?.settings?.walletConfig;
+          if (walletConfig2) {
+            const hederaResult = await hederaService.storePatentHashWithWallet(
+              patent.id,
+              req.files[0].path,
+              walletConfig2
+            );
+            await storage.updatePatent(patent.id, {
+              hederaTopicId: hederaResult.topicId,
+              hederaMessageId: hederaResult.messageId,
+              hederaTransactionId: hederaResult.transactionId,
+              hashValue: hederaResult.hash
+            });
+            console.log("\u2705 Patent successfully stored on Hedera blockchain:", hederaResult);
+          } else {
+            throw new Error("Wallet configuration missing during blockchain storage");
+          }
         } catch (hederaError) {
           console.error("\u274C Hedera blockchain storage failed:", hederaError.message);
           await storage.updatePatent(patent.id, {
@@ -1425,6 +1565,100 @@ async function setupRoutes(app2) {
       res.status(500).json({ message: "Failed to generate patent draft" });
     }
   });
+  app2.post("/api/wallet/validate", async (req, res) => {
+    try {
+      const { accountId, privateKey, network } = req.body;
+      if (!accountId || !privateKey || !network) {
+        return res.status(400).json({ message: "Account ID, private key and network are required" });
+      }
+      const validationResult = await hederaService.validateWallet(accountId, privateKey, network);
+      if (validationResult.isValid) {
+        res.json({
+          isValid: true,
+          balance: validationResult.balance,
+          message: "Wallet validation successful"
+        });
+      } else {
+        res.status(400).json({
+          isValid: false,
+          error: validationResult.error,
+          message: "Wallet validation failed"
+        });
+      }
+    } catch (error) {
+      console.error("Error validating wallet:", error);
+      res.status(500).json({ message: "Failed to validate wallet" });
+    }
+  });
+  app2.post("/api/wallet/configure", requireAuth, async (req, res) => {
+    try {
+      const { accountId, privateKey, network } = req.body;
+      const userId = req.user.id;
+      if (!accountId || !privateKey || !network) {
+        return res.status(400).json({ message: "Account ID, private key, and network are required" });
+      }
+      const validationResult = await hederaService.validateWallet(accountId, privateKey, network);
+      if (!validationResult.isValid) {
+        return res.status(400).json({
+          message: "Invalid wallet credentials",
+          error: validationResult.error
+        });
+      }
+      const walletConfig = {
+        accountId,
+        privateKey,
+        // In production, this should be encrypted
+        network,
+        configuredAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      await storage.updateUserSettings(userId, {
+        walletConfig
+      });
+      res.json({
+        message: "Wallet configured successfully",
+        accountId,
+        network,
+        balance: validationResult.balance
+      });
+    } catch (error) {
+      console.error("Error configuring wallet:", error);
+      res.status(500).json({ message: "Failed to configure wallet" });
+    }
+  });
+  app2.get("/api/wallet/status", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUserById(userId);
+      if (!user || !user.settings?.walletConfig) {
+        return res.json({
+          isConfigured: false,
+          message: "No wallet configured"
+        });
+      }
+      const { privateKey, ...walletInfo } = user.settings.walletConfig;
+      res.json({
+        isConfigured: true,
+        ...walletInfo
+      });
+    } catch (error) {
+      console.error("Error checking wallet status:", error);
+      res.status(500).json({ message: "Failed to check wallet status" });
+    }
+  });
+  app2.delete("/api/wallet/disconnect", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUserById(userId);
+      if (user && user.settings) {
+        const { walletConfig, ...otherSettings } = user.settings;
+        await storage.updateUserSettings(userId, otherSettings);
+      }
+      res.json({ message: "Wallet disconnected successfully" });
+    } catch (error) {
+      console.error("Error disconnecting wallet:", error);
+      res.status(500).json({ message: "Failed to disconnect wallet" });
+    }
+  });
   app2.get("/api/blockchain/verify/:patentId", requireAuth, async (req, res) => {
     try {
       const patent = await storage.getPatent(req.params.patentId);
@@ -1455,7 +1689,12 @@ async function setupRoutes(app2) {
       if (patent.hederaNftId) {
         return res.status(400).json({ message: "NFT already minted for this patent" });
       }
-      const nftResult = await hederaService.mintPatentNFT(patent);
+      const user = await storage.getUserById(userId);
+      const walletConfig = user?.settings?.walletConfig;
+      if (!walletConfig || !walletConfig.accountId || !walletConfig.privateKey) {
+        return res.status(400).json({ message: "Wallet not configured. Please configure your Hedera wallet first." });
+      }
+      const nftResult = await hederaService.mintPatentNFT(patent, walletConfig);
       await storage.updatePatent(req.params.patentId, {
         hederaNftId: nftResult.nftId
       });
@@ -1697,12 +1936,33 @@ if (IS_PRODUCTION) {
     res.status(status).json({ message });
   });
   const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen({
+  const serverInstance = server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true
   }, () => {
     console.log(`\u{1F680} Server running on port ${port} (${NODE_ENV})`);
-    console.log(`\u{1F4E1} CORS origins: ${corsOrigins.join(", ")}`);
+    console.log(`\u{1F4A1} Type 'rs' and press Enter to restart the server`);
   });
+  if (process.stdin.isTTY) {
+    process.stdin.resume();
+    process.stdin.setEncoding("utf8");
+    let inputBuffer = "";
+    process.stdin.on("data", (data) => {
+      const input = data.toString().trim();
+      if (input === "") {
+        process.exit();
+      }
+      if (input === "rs") {
+        console.log("\u{1F504} Restarting server...");
+        serverInstance.close(() => {
+          process.exit(1);
+        });
+        return;
+      }
+      if (input && input !== "rs") {
+        console.log(`Unknown command: ${input}. Type 'rs' to restart.`);
+      }
+    });
+  }
 })();

@@ -1470,9 +1470,20 @@ export declare const patentActivityRelations: import("drizzle-orm").Relations<"p
     patent: import("drizzle-orm").One<"patents", true>;
     user: import("drizzle-orm").One<"users", true>;
 }>;
+export interface WalletConfig {
+    accountId: string;
+    privateKey: string;
+    network: 'testnet' | 'mainnet';
+}
+export interface UserSettings {
+    walletConfig?: WalletConfig;
+    [key: string]: any;
+}
 export type InsertUser = typeof users.$inferInsert;
 export type UpsertUser = typeof users.$inferInsert;
-export type User = typeof users.$inferSelect;
+export type User = typeof users.$inferSelect & {
+    settings?: UserSettings;
+};
 export type InsertPatent = typeof patents.$inferInsert;
 export type Patent = typeof patents.$inferSelect;
 export type InsertPatentDocument = typeof patentDocuments.$inferInsert;

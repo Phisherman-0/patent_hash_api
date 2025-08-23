@@ -1,28 +1,6 @@
-import {
-  users,
-  patents,
-  patentDocuments,
-  aiAnalysis,
-  priorArtResults,
-  blockchainTransactions,
-  patentActivity,
-  type User,
-  type InsertUser,
-  type UpsertUser,
-  type Patent,
-  type InsertPatent,
-  type PatentDocument,
-  type InsertPatentDocument,
-  type AIAnalysis,
-  type InsertAIAnalysis,
-  type PriorArtResult,
-  type InsertPriorArtResult,
-  type BlockchainTransaction,
-  type InsertBlockchainTransaction,
-  type PatentActivity,
-  type InsertPatentActivity,
-} from "@shared/schema";
-import { db } from "./db";
+import { db } from './db';
+import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity } from './shared/schema';
+import type { User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, PatentActivity, InsertPatentActivity, UserSettings } from './shared/schema';
 import { eq, desc, and, ilike, sql } from "drizzle-orm";
 
 // Interface for storage operations
@@ -32,8 +10,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
-  updateUserSettings(id: string, settings: any): Promise<void>;
+  updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
+  updateUserSettings(id: string, settings: Partial<UserSettings>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
   
   // Patent operations
@@ -87,7 +65,12 @@ export class DatabaseStorage implements IStorage {
   // User operations (IMPORTANT: mandatory for Replit Auth)
   async getUser(id: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
+    const user = result[0];
+    if (!user) return undefined;
+    return {
+      ...user,
+      settings: user.settings as UserSettings | undefined
+    };
   }
 
   async getUserById(id: string): Promise<User | undefined> {
@@ -96,21 +79,45 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(userData: Omit<InsertUser, 'id'>): Promise<User> {
     const [user] = await db.insert(users).values(userData).returning();
-    return user;
+    return {
+      ...user,
+      settings: user.settings as UserSettings | undefined
+    };
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (!user) return undefined;
+    return {
+      ...user,
+      settings: user.settings as UserSettings | undefined
+    };
   }
 
-  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
-    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    return user;
+  async updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users).set(userData).where(eq(users.id, id)).returning();
+    if (!user) return undefined;
+    return {
+      ...user,
+      settings: user.settings as UserSettings | undefined
+    };
   }
 
-  async updateUserSettings(id: string, settings: any): Promise<void> {
-    await db.update(users).set({ settings }).where(eq(users.id, id));
+  async updateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<User | undefined> {
+    const user = await this.getUserById(userId);
+    if (!user) return undefined;
+    
+    const updatedSettings = { ...user.settings, ...settings };
+    const [updatedUser] = await db.update(users)
+      .set({ settings: updatedSettings })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    if (!updatedUser) return undefined;
+    return {
+      ...updatedUser,
+      settings: updatedUser.settings as UserSettings | undefined
+    };
   }
 
   async deleteUser(id: string): Promise<void> {
@@ -129,7 +136,10 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
-    return user;
+    return {
+      ...user,
+      settings: user.settings as UserSettings | undefined
+    };
   }
 
   // Patent operations

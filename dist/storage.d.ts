@@ -1,11 +1,11 @@
-import { type User, type InsertUser, type UpsertUser, type Patent, type InsertPatent, type PatentDocument, type InsertPatentDocument, type AIAnalysis, type InsertAIAnalysis, type PriorArtResult, type InsertPriorArtResult, type BlockchainTransaction, type InsertBlockchainTransaction, type PatentActivity, type InsertPatentActivity } from "@shared/schema";
+import type { User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, PatentActivity, InsertPatentActivity, UserSettings } from './shared/schema';
 export interface IStorage {
     createUser(user: InsertUser): Promise<User>;
     getUser(id: string): Promise<User | undefined>;
     getUserById(id: string): Promise<User | undefined>;
     getUserByEmail(email: string): Promise<User | undefined>;
-    updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
-    updateUserSettings(id: string, settings: any): Promise<void>;
+    updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
+    updateUserSettings(id: string, settings: Partial<UserSettings>): Promise<User | undefined>;
     deleteUser(id: string): Promise<void>;
     createPatent(patent: InsertPatent): Promise<Patent>;
     getPatent(id: string): Promise<Patent | undefined>;
@@ -43,8 +43,8 @@ export declare class DatabaseStorage implements IStorage {
     getUserById(id: string): Promise<User | undefined>;
     createUser(userData: Omit<InsertUser, 'id'>): Promise<User>;
     getUserByEmail(email: string): Promise<User | undefined>;
-    updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
-    updateUserSettings(id: string, settings: any): Promise<void>;
+    updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined>;
+    updateUserSettings(userId: string, settings: Partial<UserSettings>): Promise<User | undefined>;
     deleteUser(id: string): Promise<void>;
     upsertUser(userData: UpsertUser): Promise<User>;
     createPatent(patent: InsertPatent): Promise<Patent>;

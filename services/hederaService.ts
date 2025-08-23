@@ -1,7 +1,7 @@
-import { Client, TopicCreateTransaction, TopicMessageSubmitTransaction, TopicInfoQuery, TopicId, AccountId, PrivateKey, TokenCreateTransaction, TokenId, TokenMintTransaction, TokenNftInfoQuery, TokenType, TokenSupplyType, AccountBalanceQuery } from "@hashgraph/sdk";
-import crypto from "crypto";
-import fs from "fs";
-import type { Patent } from "@shared/schema";
+import { Client, AccountId, PrivateKey, TopicCreateTransaction, TopicMessageSubmitTransaction, TokenCreateTransaction, TokenType, TokenSupplyType, TokenMintTransaction, TransferTransaction, AccountBalanceQuery, TokenAssociateTransaction, Hbar, TopicInfoQuery, TopicId } from "@hashgraph/sdk";
+import crypto from 'crypto';
+import fs from 'fs';
+import { Patent, WalletConfig } from '../shared/schema';
 
 class HederaService {
   private client: Client | null = null;
@@ -86,7 +86,7 @@ class HederaService {
     }
   }
 
-  async storePatentHashWithWallet(patentId: string, filePath: string, walletConfig: any): Promise<{
+  async storePatentHashWithWallet(patentId: string, filePath: string, walletConfig: WalletConfig): Promise<{
     topicId: string;
     messageId: string;
     hash: string;
@@ -232,7 +232,7 @@ class HederaService {
     }
   }
 
-  async mintPatentNFT(patent: Patent, walletConfig?: any): Promise<{
+  async mintPatentNFT(patent: Patent, walletConfig?: WalletConfig): Promise<{
     nftId: string;
     transactionId: string;
     tokenId: string;
