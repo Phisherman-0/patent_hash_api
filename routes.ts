@@ -19,7 +19,7 @@ import { eq } from 'drizzle-orm';
 const upload = multer({
   dest: "uploads/",
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
+    fileSize: 20 * 1024 * 1024, // 50MB limit
   },
 });
 
@@ -331,6 +331,18 @@ export async function setupRoutes(app: Express): Promise<Server> {
     let patent: any = null;
     try {
       const userId = req.user.id;
+      
+      // Check if user has wallet configured for patent filing
+      const user = await storage.getUserById(userId);
+      const walletConfig = user?.settings?.walletConfig;
+      
+      if (!walletConfig) {
+        return res.status(400).json({ 
+          message: 'Wallet connection required for patent filing. Please configure your wallet in settings.',
+          requiresWallet: true
+        });
+      }
+      
       const patentData = insertPatentSchema.parse({
         ...req.body,
         userId,
@@ -363,17 +375,31 @@ export async function setupRoutes(app: Express): Promise<Server> {
         // Store patent hash on Hedera blockchain
         try {
           console.log(`🔗 Attempting to store patent ${patent.id} on Hedera blockchain...`);
-          const hederaResult = await hederaService.storePatentHash(patent.id, req.files[0].path);
           
-          // Update patent with Hedera information
-          await storage.updatePatent(patent.id, {
-            hederaTopicId: hederaResult.topicId,
-            hederaMessageId: hederaResult.messageId,
-            hederaTransactionId: hederaResult.transactionId,
-            hashValue: hederaResult.hash,
-          });
+          // Get user's wallet configuration
+          const user = await storage.getUserById(userId);
+          const walletConfig = user?.settings?.walletConfig;
           
-          console.log('✅ Patent successfully stored on Hedera blockchain:', hederaResult);
+          // Wallet is guaranteed to exist at this point
+          if (walletConfig) {
+            const hederaResult = await hederaService.storePatentHashWithWallet(
+              patent.id, 
+              req.files[0].path,
+              walletConfig
+            );
+            
+            // Update patent with Hedera information
+            await storage.updatePatent(patent.id, {
+              hederaTopicId: hederaResult.topicId,
+              hederaMessageId: hederaResult.messageId,
+              hederaTransactionId: hederaResult.transactionId,
+              hashValue: hederaResult.hash,
+            });
+            
+            console.log('✅ Patent successfully stored on Hedera blockchain:', hederaResult);
+          } else {
+            throw new Error('Wallet configuration missing during blockchain storage');
+          }
         } catch (hederaError: any) {
           console.error('❌ Hedera blockchain storage failed:', hederaError.message);
           
@@ -603,6 +629,121 @@ export async function setupRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Wallet validation route (no auth required for validation only)
+  app.post('/api/wallet/validate', async (req: any, res) => {
+    try {
+      const { accountId, privateKey, network } = req.body;
+
+      if (!accountId || !privateKey || !network) {
+        return res.status(400).json({ message: 'Account ID, private key and network are required' });
+      }
+
+      // Validate wallet credentials with Hedera
+      const validationResult = await hederaService.validateWallet(accountId, privateKey, network);
+
+      if (validationResult.isValid) {
+        res.json({
+          isValid: true,
+          balance: validationResult.balance,
+          message: 'Wallet validation successful'
+        });
+      } else {
+        res.status(400).json({
+          isValid: false,
+          error: validationResult.error,
+          message: 'Wallet validation failed'
+        });
+      }
+    } catch (error) {
+      console.error('Error validating wallet:', error);
+      res.status(500).json({ message: 'Failed to validate wallet' });
+    }
+  });
+
+  // Wallet configuration routes
+  app.post('/api/wallet/configure', requireAuth, async (req: any, res) => {
+    try {
+      const { accountId, privateKey, network } = req.body;
+      const userId = req.user.id;
+
+      if (!accountId || !privateKey || !network) {
+        return res.status(400).json({ message: 'Account ID, private key, and network are required' });
+      }
+
+      // Validate wallet before saving
+      const validationResult = await hederaService.validateWallet(accountId, privateKey, network);
+      
+      if (!validationResult.isValid) {
+        return res.status(400).json({ 
+          message: 'Invalid wallet credentials',
+          error: validationResult.error
+        });
+      }
+
+      // Store wallet configuration in user settings
+      const walletConfig = {
+        accountId,
+        privateKey, // In production, this should be encrypted
+        network,
+        configuredAt: new Date().toISOString()
+      };
+
+      await storage.updateUserSettings(userId, {
+        walletConfig
+      });
+
+      res.json({ 
+        message: 'Wallet configured successfully',
+        accountId,
+        network,
+        balance: validationResult.balance
+      });
+    } catch (error) {
+      console.error('Error configuring wallet:', error);
+      res.status(500).json({ message: 'Failed to configure wallet' });
+    }
+  });
+
+  app.get('/api/wallet/status', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUserById(userId);
+      
+      if (!user || !user.settings?.walletConfig) {
+        return res.json({ 
+          isConfigured: false,
+          message: 'No wallet configured'
+        });
+      }
+
+      const { privateKey, ...walletInfo } = user.settings.walletConfig;
+      res.json({
+        isConfigured: true,
+        ...walletInfo
+      });
+    } catch (error) {
+      console.error('Error checking wallet status:', error);
+      res.status(500).json({ message: 'Failed to check wallet status' });
+    }
+  });
+
+  app.delete('/api/wallet/disconnect', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const user = await storage.getUserById(userId);
+      
+      if (user && user.settings) {
+        const { walletConfig, ...otherSettings } = user.settings;
+        await storage.updateUserSettings(userId, otherSettings);
+      }
+
+      res.json({ message: 'Wallet disconnected successfully' });
+    } catch (error) {
+      console.error('Error disconnecting wallet:', error);
+      res.status(500).json({ message: 'Failed to disconnect wallet' });
+    }
+  });
+
   // Blockchain verification routes
   app.get('/api/blockchain/verify/:patentId', requireAuth, async (req: any, res) => {
     try {
@@ -642,8 +783,16 @@ export async function setupRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "NFT already minted for this patent" });
       }
 
-      // Mint NFT on Hedera
-      const nftResult = await hederaService.mintPatentNFT(patent);
+      // Get user's wallet configuration
+      const user = await storage.getUserById(userId);
+      const walletConfig = user?.settings?.walletConfig;
+      
+      if (!walletConfig || !walletConfig.accountId || !walletConfig.privateKey) {
+        return res.status(400).json({ message: "Wallet not configured. Please configure your Hedera wallet first." });
+      }
+
+      // Mint NFT on Hedera with user's wallet
+      const nftResult = await hederaService.mintPatentNFT(patent, walletConfig);
 
       // Update patent with NFT information
       await storage.updatePatent(req.params.patentId, {

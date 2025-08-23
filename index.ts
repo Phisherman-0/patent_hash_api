@@ -91,12 +91,44 @@ if (IS_PRODUCTION) {
 
 
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
+  const serverInstance = server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
     console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
-    console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
+    console.log(`💡 Type 'rs' and press Enter to restart the server`);
   });
+
+  // Add restart functionality
+  if (process.stdin.isTTY) {
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+    
+    let inputBuffer = '';
+    
+    process.stdin.on('data', (data) => {
+      const input = data.toString().trim();
+      
+      // Handle Ctrl+C
+      if (input === '\u0003') {
+        process.exit();
+      }
+      
+      // Check for restart command
+      if (input === 'rs') {
+        console.log('🔄 Restarting server...');
+        serverInstance.close(() => {
+          // Signal tsx watch to restart by exiting with code 1
+          process.exit(1);
+        });
+        return;
+      }
+      
+      // Echo the input for feedback
+      if (input && input !== 'rs') {
+        console.log(`Unknown command: ${input}. Type 'rs' to restart.`);
+      }
+    });
+  }
 })();
