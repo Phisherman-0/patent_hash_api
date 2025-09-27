@@ -1,43 +1,80 @@
-import { Patent, WalletConfig } from '../shared/schema';
+import { Patent, WalletConnection } from '../shared/schema';
 declare class HederaService {
-    private client;
-    private operatorId;
-    private operatorKey;
     constructor();
+    /**
+     * Validate wallet credentials (legacy method for backward compatibility)
+     */
     validateWallet(accountId: string, privateKey: string, network: 'testnet' | 'mainnet'): Promise<{
         isValid: boolean;
         balance?: string;
         error?: string;
     }>;
-    storePatentHashWithWallet(patentId: string, filePath: string, walletConfig: WalletConfig): Promise<{
-        topicId: string;
-        messageId: string;
-        hash: string;
-        transactionId: string;
+    /**
+     * Store patent hash with wallet connection (HashPack integration)
+     */
+    storePatentHashWithWallet(patentHash: string, patent: Patent, walletConnection: WalletConnection): Promise<{
+        success: boolean;
+        topicId?: string;
+        messageId?: string;
+        transactionId?: string;
+        error?: string;
     }>;
-    storePatentHash(patentId: string, filePath: string): Promise<{
-        topicId: string;
-        messageId: string;
-        hash: string;
-        transactionId: string;
+    /**
+     * Create unsigned transaction for HashPack signing
+     */
+    createUnsignedPatentHashTransaction(patentHash: string, patent: Patent, network?: 'testnet' | 'mainnet'): Promise<{
+        success: boolean;
+        transactionBytes?: string;
+        topicId?: string;
+        error?: string;
     }>;
-    private executePatentHashStorage;
+    /**
+     * Submit signed transaction from HashPack
+     */
+    submitSignedTransaction(signedTransactionBytes: string, network?: 'testnet' | 'mainnet'): Promise<{
+        success: boolean;
+        transactionId?: string;
+        topicId?: string;
+        error?: string;
+    }>;
+    /**
+     * Verify patent hash on blockchain
+     */
     verifyPatentHash(topicId: string, messageId: string, expectedHash: string): Promise<{
         verified: boolean;
         actualHash?: string;
         timestamp?: string;
         message: string;
     }>;
-    mintPatentNFT(patent: Patent, walletConfig?: WalletConfig): Promise<{
-        nftId: string;
-        transactionId: string;
-        tokenId: string;
+    /**
+     * Mint patent NFT with wallet connection
+     */
+    mintPatentNFTWithWallet(patent: Patent, walletConfig: any): Promise<{
+        success: boolean;
+        tokenId?: string;
+        nftId?: string;
+        transactionId?: string;
+        error?: string;
     }>;
+    /**
+     * Transfer patent NFT
+     */
     transferPatentNFT(tokenId: string, serial: number, fromAccountId: string, toAccountId: string): Promise<{
         transactionId: string;
         success: boolean;
     }>;
+    /**
+     * Calculate file hash
+     */
+    calculateFileHash(filePath: string): string;
+    /**
+     * Get network status
+     */
+    getNetworkStatus(network?: 'testnet' | 'mainnet'): Promise<{
+        isOnline: boolean;
+        error?: string;
+    }>;
 }
-export declare const hederaService: HederaService;
-export {};
+declare const _default: HederaService;
+export default _default;
 //# sourceMappingURL=hederaService.d.ts.map

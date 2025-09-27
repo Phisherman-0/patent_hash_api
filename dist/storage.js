@@ -1,5 +1,5 @@
 import { db } from './db';
-import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity } from './shared/schema';
+import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity, consultants, appointments, chatRooms, chatMessages } from './shared/schema';
 import { eq, desc, and, ilike, sql } from "drizzle-orm";
 export class DatabaseStorage {
     // User operations (IMPORTANT: mandatory for Replit Auth)
@@ -224,6 +224,381 @@ export class DatabaseStorage {
             pendingReviews: stats.pendingReviews,
             blockchainVerified: stats.blockchainVerified,
             portfolioValue: stats.portfolioValue,
+        };
+    }
+    // Consultant operations
+    async createConsultant(consultant) {
+        const [newConsultant] = await db.insert(consultants).values(consultant).returning();
+        return {
+            ...newConsultant,
+            specialization: newConsultant.specialization ?? undefined,
+            bio: newConsultant.bio ?? undefined,
+            experienceYears: newConsultant.experienceYears ?? undefined,
+            hourlyRate: newConsultant.hourlyRate !== null && newConsultant.hourlyRate !== undefined ?
+                Number(newConsultant.hourlyRate) : undefined,
+            rating: newConsultant.rating !== null && newConsultant.rating !== undefined ?
+                Number(newConsultant.rating) : undefined,
+            isVerified: newConsultant.isVerified ?? false,
+            verifiedBy: newConsultant.verifiedBy ?? undefined,
+            verifiedAt: newConsultant.verifiedAt ?? undefined,
+            verificationNotes: newConsultant.verificationNotes ?? undefined,
+            createdAt: newConsultant.createdAt ?? undefined,
+            updatedAt: newConsultant.updatedAt ?? undefined,
+        };
+    }
+    async getConsultant(id) {
+        const [consultant] = await db.select().from(consultants).where(eq(consultants.id, id)).limit(1);
+        if (!consultant)
+            return undefined;
+        return {
+            ...consultant,
+            specialization: consultant.specialization ?? undefined,
+            bio: consultant.bio ?? undefined,
+            experienceYears: consultant.experienceYears ?? undefined,
+            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                Number(consultant.hourlyRate) : undefined,
+            rating: consultant.rating !== null && consultant.rating !== undefined ?
+                Number(consultant.rating) : undefined,
+            isVerified: consultant.isVerified ?? false,
+            verifiedBy: consultant.verifiedBy ?? undefined,
+            verifiedAt: consultant.verifiedAt ?? undefined,
+            verificationNotes: consultant.verificationNotes ?? undefined,
+            createdAt: consultant.createdAt ?? undefined,
+            updatedAt: consultant.updatedAt ?? undefined,
+        };
+    }
+    async getConsultantByUserId(userId) {
+        const [consultant] = await db.select().from(consultants).where(eq(consultants.userId, userId)).limit(1);
+        if (!consultant)
+            return undefined;
+        return {
+            ...consultant,
+            specialization: consultant.specialization ?? undefined,
+            bio: consultant.bio ?? undefined,
+            experienceYears: consultant.experienceYears ?? undefined,
+            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                Number(consultant.hourlyRate) : undefined,
+            rating: consultant.rating !== null && consultant.rating !== undefined ?
+                Number(consultant.rating) : undefined,
+            isVerified: consultant.isVerified ?? false,
+            verifiedBy: consultant.verifiedBy ?? undefined,
+            verifiedAt: consultant.verifiedAt ?? undefined,
+            verificationNotes: consultant.verificationNotes ?? undefined,
+            createdAt: consultant.createdAt ?? undefined,
+            updatedAt: consultant.updatedAt ?? undefined,
+        };
+    }
+    async updateConsultant(id, updates) {
+        const [updatedConsultant] = await db.update(consultants).set(updates).where(eq(consultants.id, id)).returning();
+        if (!updatedConsultant)
+            return undefined;
+        return {
+            ...updatedConsultant,
+            specialization: updatedConsultant.specialization ?? undefined,
+            bio: updatedConsultant.bio ?? undefined,
+            experienceYears: updatedConsultant.experienceYears ?? undefined,
+            hourlyRate: updatedConsultant.hourlyRate !== null && updatedConsultant.hourlyRate !== undefined ?
+                Number(updatedConsultant.hourlyRate) : undefined,
+            rating: updatedConsultant.rating !== null && updatedConsultant.rating !== undefined ?
+                Number(updatedConsultant.rating) : undefined,
+            isVerified: updatedConsultant.isVerified ?? false,
+            verifiedBy: updatedConsultant.verifiedBy ?? undefined,
+            verifiedAt: updatedConsultant.verifiedAt ?? undefined,
+            verificationNotes: updatedConsultant.verificationNotes ?? undefined,
+            createdAt: updatedConsultant.createdAt ?? undefined,
+            updatedAt: updatedConsultant.updatedAt ?? undefined,
+        };
+    }
+    async deleteConsultant(id) {
+        await db.delete(consultants).where(eq(consultants.id, id));
+    }
+    async getAllConsultants() {
+        const consultantList = await db.select().from(consultants);
+        return consultantList.map(consultant => ({
+            ...consultant,
+            specialization: consultant.specialization ?? undefined,
+            bio: consultant.bio ?? undefined,
+            experienceYears: consultant.experienceYears ?? undefined,
+            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                Number(consultant.hourlyRate) : undefined,
+            rating: consultant.rating !== null && consultant.rating !== undefined ?
+                Number(consultant.rating) : undefined,
+            isVerified: consultant.isVerified ?? false,
+            verifiedBy: consultant.verifiedBy ?? undefined,
+            verifiedAt: consultant.verifiedAt ?? undefined,
+            verificationNotes: consultant.verificationNotes ?? undefined,
+            createdAt: consultant.createdAt ?? undefined,
+            updatedAt: consultant.updatedAt ?? undefined,
+        }));
+    }
+    async getConsultantsBySpecialization(specialization) {
+        const consultantList = await db.select().from(consultants).where(eq(consultants.specialization, specialization));
+        return consultantList.map(consultant => ({
+            ...consultant,
+            specialization: consultant.specialization ?? undefined,
+            bio: consultant.bio ?? undefined,
+            experienceYears: consultant.experienceYears ?? undefined,
+            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                Number(consultant.hourlyRate) : undefined,
+            rating: consultant.rating !== null && consultant.rating !== undefined ?
+                Number(consultant.rating) : undefined,
+            isVerified: consultant.isVerified ?? false,
+            verifiedBy: consultant.verifiedBy ?? undefined,
+            verifiedAt: consultant.verifiedAt ?? undefined,
+            verificationNotes: consultant.verificationNotes ?? undefined,
+            createdAt: consultant.createdAt ?? undefined,
+            updatedAt: consultant.updatedAt ?? undefined,
+        }));
+    }
+    async getVerifiedConsultants() {
+        const consultantList = await db.select().from(consultants).where(eq(consultants.isVerified, true));
+        return consultantList.map(consultant => ({
+            ...consultant,
+            specialization: consultant.specialization ?? undefined,
+            bio: consultant.bio ?? undefined,
+            experienceYears: consultant.experienceYears ?? undefined,
+            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                Number(consultant.hourlyRate) : undefined,
+            rating: consultant.rating !== null && consultant.rating !== undefined ?
+                Number(consultant.rating) : undefined,
+            isVerified: consultant.isVerified ?? false,
+            verifiedBy: consultant.verifiedBy ?? undefined,
+            verifiedAt: consultant.verifiedAt ?? undefined,
+            verificationNotes: consultant.verificationNotes ?? undefined,
+            createdAt: consultant.createdAt ?? undefined,
+            updatedAt: consultant.updatedAt ?? undefined,
+        }));
+    }
+    async getUnverifiedConsultants() {
+        const consultantList = await db.select().from(consultants).where(eq(consultants.isVerified, false));
+        return consultantList.map(consultant => ({
+            ...consultant,
+            specialization: consultant.specialization ?? undefined,
+            bio: consultant.bio ?? undefined,
+            experienceYears: consultant.experienceYears ?? undefined,
+            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                Number(consultant.hourlyRate) : undefined,
+            rating: consultant.rating !== null && consultant.rating !== undefined ?
+                Number(consultant.rating) : undefined,
+            isVerified: consultant.isVerified ?? false,
+            verifiedBy: consultant.verifiedBy ?? undefined,
+            verifiedAt: consultant.verifiedAt ?? undefined,
+            verificationNotes: consultant.verificationNotes ?? undefined,
+            createdAt: consultant.createdAt ?? undefined,
+            updatedAt: consultant.updatedAt ?? undefined,
+        }));
+    }
+    async verifyConsultant(id, adminUserId, notes) {
+        const [updatedConsultant] = await db.update(consultants)
+            .set({
+            isVerified: true,
+            verifiedBy: adminUserId,
+            verifiedAt: new Date(),
+            verificationNotes: notes,
+            updatedAt: new Date()
+        })
+            .where(eq(consultants.id, id))
+            .returning();
+        if (!updatedConsultant)
+            return undefined;
+        return {
+            ...updatedConsultant,
+            specialization: updatedConsultant.specialization ?? undefined,
+            bio: updatedConsultant.bio ?? undefined,
+            experienceYears: updatedConsultant.experienceYears ?? undefined,
+            hourlyRate: updatedConsultant.hourlyRate !== null && updatedConsultant.hourlyRate !== undefined ?
+                Number(updatedConsultant.hourlyRate) : undefined,
+            rating: updatedConsultant.rating !== null && updatedConsultant.rating !== undefined ?
+                Number(updatedConsultant.rating) : undefined,
+            isVerified: updatedConsultant.isVerified ?? false,
+            verifiedBy: updatedConsultant.verifiedBy ?? undefined,
+            verifiedAt: updatedConsultant.verifiedAt ?? undefined,
+            verificationNotes: updatedConsultant.verificationNotes ?? undefined,
+            createdAt: updatedConsultant.createdAt ?? undefined,
+            updatedAt: updatedConsultant.updatedAt ?? undefined,
+        };
+    }
+    async rejectConsultant(id, adminUserId, notes) {
+        const [updatedConsultant] = await db.update(consultants)
+            .set({
+            isVerified: false,
+            verifiedBy: adminUserId,
+            verifiedAt: new Date(),
+            verificationNotes: notes || 'Application rejected',
+            updatedAt: new Date()
+        })
+            .where(eq(consultants.id, id))
+            .returning();
+        if (!updatedConsultant)
+            return undefined;
+        return {
+            ...updatedConsultant,
+            specialization: updatedConsultant.specialization ?? undefined,
+            bio: updatedConsultant.bio ?? undefined,
+            experienceYears: updatedConsultant.experienceYears ?? undefined,
+            hourlyRate: updatedConsultant.hourlyRate !== null && updatedConsultant.hourlyRate !== undefined ?
+                Number(updatedConsultant.hourlyRate) : undefined,
+            rating: updatedConsultant.rating !== null && updatedConsultant.rating !== undefined ?
+                Number(updatedConsultant.rating) : undefined,
+            isVerified: updatedConsultant.isVerified ?? false,
+            verifiedBy: updatedConsultant.verifiedBy ?? undefined,
+            verifiedAt: updatedConsultant.verifiedAt ?? undefined,
+            verificationNotes: updatedConsultant.verificationNotes ?? undefined,
+            createdAt: updatedConsultant.createdAt ?? undefined,
+            updatedAt: updatedConsultant.updatedAt ?? undefined,
+        };
+    }
+    // Appointment operations
+    async createAppointment(appointment) {
+        const [newAppointment] = await db.insert(appointments).values(appointment).returning();
+        return {
+            ...newAppointment,
+            description: newAppointment.description ?? undefined,
+            meetingLink: newAppointment.meetingLink ?? undefined,
+            status: newAppointment.status ?? 'pending',
+            createdAt: newAppointment.createdAt ?? undefined,
+            updatedAt: newAppointment.updatedAt ?? undefined,
+        };
+    }
+    async getAppointment(id) {
+        const [appointment] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
+        if (!appointment)
+            return undefined;
+        return {
+            ...appointment,
+            description: appointment.description ?? undefined,
+            meetingLink: appointment.meetingLink ?? undefined,
+            status: appointment.status ?? 'pending',
+            createdAt: appointment.createdAt ?? undefined,
+            updatedAt: appointment.updatedAt ?? undefined,
+        };
+    }
+    async getAppointmentsByUser(userId) {
+        const appointmentList = await db.select().from(appointments).where(eq(appointments.userId, userId)).orderBy(desc(appointments.appointmentDate));
+        return appointmentList.map(appointment => ({
+            ...appointment,
+            description: appointment.description ?? undefined,
+            meetingLink: appointment.meetingLink ?? undefined,
+            status: appointment.status ?? 'pending',
+            createdAt: appointment.createdAt ?? undefined,
+            updatedAt: appointment.updatedAt ?? undefined,
+        }));
+    }
+    async getAppointmentsByConsultant(consultantId) {
+        const appointmentList = await db.select().from(appointments).where(eq(appointments.consultantId, consultantId)).orderBy(desc(appointments.appointmentDate));
+        return appointmentList.map(appointment => ({
+            ...appointment,
+            description: appointment.description ?? undefined,
+            meetingLink: appointment.meetingLink ?? undefined,
+            status: appointment.status ?? 'pending',
+            createdAt: appointment.createdAt ?? undefined,
+            updatedAt: appointment.updatedAt ?? undefined,
+        }));
+    }
+    async updateAppointment(id, updates) {
+        const [updatedAppointment] = await db.update(appointments).set(updates).where(eq(appointments.id, id)).returning();
+        if (!updatedAppointment)
+            return undefined;
+        return {
+            ...updatedAppointment,
+            description: updatedAppointment.description ?? undefined,
+            meetingLink: updatedAppointment.meetingLink ?? undefined,
+            status: updatedAppointment.status ?? 'pending',
+            createdAt: updatedAppointment.createdAt ?? undefined,
+            updatedAt: updatedAppointment.updatedAt ?? undefined,
+        };
+    }
+    async deleteAppointment(id) {
+        await db.delete(appointments).where(eq(appointments.id, id));
+    }
+    // Chat operations
+    async createChatRoom(userId, consultantId) {
+        // Check if chat room already exists
+        const existingRoom = await db.select().from(chatRooms)
+            .where(and(eq(chatRooms.userId, userId), eq(chatRooms.consultantId, consultantId))).limit(1);
+        if (existingRoom.length > 0) {
+            const room = existingRoom[0];
+            return {
+                ...room,
+                createdAt: room.createdAt ?? undefined,
+                updatedAt: room.updatedAt ?? undefined,
+            };
+        }
+        // Create new chat room
+        const [newChatRoom] = await db.insert(chatRooms).values({
+            userId,
+            consultantId
+        }).returning();
+        return {
+            ...newChatRoom,
+            createdAt: newChatRoom.createdAt ?? undefined,
+            updatedAt: newChatRoom.updatedAt ?? undefined,
+        };
+    }
+    async getChatRoom(id) {
+        const [chatRoom] = await db.select().from(chatRooms).where(eq(chatRooms.id, id)).limit(1);
+        if (!chatRoom)
+            return undefined;
+        return {
+            ...chatRoom,
+            createdAt: chatRoom.createdAt ?? undefined,
+            updatedAt: chatRoom.updatedAt ?? undefined,
+        };
+    }
+    async getChatRoomByParticipants(userId, consultantId) {
+        const [chatRoom] = await db.select().from(chatRooms)
+            .where(and(eq(chatRooms.userId, userId), eq(chatRooms.consultantId, consultantId))).limit(1);
+        if (!chatRoom)
+            return undefined;
+        return {
+            ...chatRoom,
+            createdAt: chatRoom.createdAt ?? undefined,
+            updatedAt: chatRoom.updatedAt ?? undefined,
+        };
+    }
+    async getChatRoomsByUser(userId) {
+        const chatRoomList = await db.select().from(chatRooms).where(eq(chatRooms.userId, userId)).orderBy(desc(chatRooms.createdAt));
+        return chatRoomList.map(chatRoom => ({
+            ...chatRoom,
+            createdAt: chatRoom.createdAt ?? undefined,
+            updatedAt: chatRoom.updatedAt ?? undefined,
+        }));
+    }
+    async getChatRoomsByConsultant(consultantId) {
+        const chatRoomList = await db.select().from(chatRooms).where(eq(chatRooms.consultantId, consultantId)).orderBy(desc(chatRooms.createdAt));
+        return chatRoomList.map(chatRoom => ({
+            ...chatRoom,
+            createdAt: chatRoom.createdAt ?? undefined,
+            updatedAt: chatRoom.updatedAt ?? undefined,
+        }));
+    }
+    async deleteChatRoom(id) {
+        await db.delete(chatRooms).where(eq(chatRooms.id, id));
+    }
+    async createChatMessage(message) {
+        const [newMessage] = await db.insert(chatMessages).values(message).returning();
+        return {
+            ...newMessage,
+            isRead: newMessage.isRead ?? false,
+            createdAt: newMessage.createdAt ?? undefined,
+        };
+    }
+    async getChatMessages(chatRoomId) {
+        const messageList = await db.select().from(chatMessages).where(eq(chatMessages.chatRoomId, chatRoomId)).orderBy(chatMessages.createdAt);
+        return messageList.map(message => ({
+            ...message,
+            isRead: message.isRead ?? false,
+            createdAt: message.createdAt ?? undefined,
+        }));
+    }
+    async markMessageAsRead(id) {
+        const [updatedMessage] = await db.update(chatMessages).set({ isRead: true }).where(eq(chatMessages.id, id)).returning();
+        if (!updatedMessage)
+            return undefined;
+        return {
+            ...updatedMessage,
+            isRead: updatedMessage.isRead ?? false,
+            createdAt: updatedMessage.createdAt ?? undefined,
         };
     }
     // Patent statistics by category

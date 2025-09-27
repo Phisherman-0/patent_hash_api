@@ -11,6 +11,7 @@ import {
   decimal,
   boolean,
   pgEnum,
+  check,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -38,7 +39,9 @@ export const users = pgTable("users", {
   settings: jsonb("settings").default(sql`'{}'`), // Store user preferences including theme
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  check("valid_role", sql`role IN ('user', 'consultant', 'admin')`)
+]);
 
 // Patent status enum
 export const patentStatusEnum = pgEnum("patent_status", [
@@ -149,10 +152,140 @@ export const patentActivity = pgTable("patent_activity", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Wallet connections table for HashPack and other wallet integrations
+export const walletConnections = pgTable("wallet_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  walletType: varchar("wallet_type").notNull(), // hashpack, legacy
+  accountId: varchar("account_id").notNull(),
+  network: varchar("network").notNull(), // testnet, mainnet
+  sessionData: jsonb("session_data"), // HashConnect session data
+  isActive: boolean("is_active").default(true),
+  lastConnected: timestamp("last_connected").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Consultants table for consultant-specific information
+export const consultants = pgTable("consultants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  specialization: varchar("specialization"),
+  bio: text("bio"),
+  experienceYears: integer("experience_years").default(0),
+  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
+  availability: jsonb("availability").default(sql`'{}'`),
+  rating: decimal("rating", { precision: 3, scale: 2 }).default("0.00"),
+  isVerified: boolean("is_verified").default(false),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  verificationNotes: text("verification_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Appointment status enum
+export const appointmentStatusEnum = pgEnum("appointment_status", [
+  "pending",
+  "confirmed",
+  "completed",
+  "cancelled"
+]);
+
+// Appointments table for booking system
+export const appointments = pgTable("appointments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  consultantId: varchar("consultant_id").notNull(),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  appointmentDate: timestamp("appointment_date").notNull(),
+  duration: integer("duration").notNull(), // in minutes
+  status: appointmentStatusEnum("status").default("pending"),
+  meetingLink: varchar("meeting_link"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  check("valid_appointment_status", sql`status IN ('pending', 'confirmed', 'completed', 'cancelled')`)
+]);
+
+// Chat rooms table for user-consultant communication
+export const chatRooms = pgTable("chat_rooms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  consultantId: varchar("consultant_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  // Ensure unique chat room between user and consultant
+  index("idx_user_consultant_unique").on(table.userId, table.consultantId)
+]);
+
+// Chat messages table for storing messages
+export const chatMessages = pgTable("chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chatRoomId: varchar("chat_room_id").notNull(),
+  senderId: varchar("sender_id").notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   patents: many(patents),
   activities: many(patentActivity),
+  walletConnections: many(walletConnections),
+}));
+
+export const walletConnectionsRelations = relations(walletConnections, ({ one }) => ({
+  user: one(users, {
+    fields: [walletConnections.userId],
+    references: [users.id],
+  }),
+}));
+
+export const consultantsRelations = relations(consultants, ({ one, many }) => ({
+  user: one(users, {
+    fields: [consultants.userId],
+    references: [users.id],
+  }),
+  appointments: many(appointments),
+  chatRooms: many(chatRooms),
+}));
+
+export const appointmentsRelations = relations(appointments, ({ one }) => ({
+  user: one(users, {
+    fields: [appointments.userId],
+    references: [users.id],
+  }),
+  consultant: one(consultants, {
+    fields: [appointments.consultantId],
+    references: [consultants.id],
+  }),
+}));
+
+export const chatRoomsRelations = relations(chatRooms, ({ one, many }) => ({
+  user: one(users, {
+    fields: [chatRooms.userId],
+    references: [users.id],
+  }),
+  consultant: one(consultants, {
+    fields: [chatRooms.consultantId],
+    references: [consultants.id],
+  }),
+  messages: many(chatMessages),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  chatRoom: one(chatRooms, {
+    fields: [chatMessages.chatRoomId],
+    references: [chatRooms.id],
+  }),
+  sender: one(users, {
+    fields: [chatMessages.senderId],
+    references: [users.id],
+  }),
 }));
 
 export const patentsRelations = relations(patents, ({ one, many }) => ({
@@ -210,17 +343,84 @@ export const patentActivityRelations = relations(patentActivity, ({ one }) => ({
   }),
 }));
 
-// Wallet configuration interface
-export interface WalletConfig {
+// HashPack wallet connection interface
+export interface HashPackWalletConfig {
+  accountId: string;
+  network: 'testnet' | 'mainnet';
+  walletType: 'hashpack';
+  sessionData?: any; // HashConnect session data
+  lastConnected?: string;
+}
+
+// Legacy wallet configuration interface (deprecated)
+export interface LegacyWalletConfig {
   accountId: string;
   privateKey: string;
   network: 'testnet' | 'mainnet';
+  walletType: 'legacy';
 }
+
+// Combined wallet configuration
+export type WalletConfig = HashPackWalletConfig | LegacyWalletConfig;
 
 // User settings interface
 export interface UserSettings {
   walletConfig?: WalletConfig;
+  theme?: 'light' | 'dark' | 'system';
+  notifications?: boolean;
   [key: string]: any; // Allow other settings
+}
+
+// Consultant interface
+export interface Consultant {
+  id: string;
+  userId: string;
+  specialization?: string;
+  bio?: string;
+  experienceYears?: number;
+  hourlyRate?: number;
+  availability?: any;
+  rating?: number;
+  isVerified?: boolean;
+  verifiedBy?: string;
+  verifiedAt?: Date;
+  verificationNotes?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Appointment interface
+export interface Appointment {
+  id: string;
+  userId: string;
+  consultantId: string;
+  title: string;
+  description?: string;
+  appointmentDate: Date;
+  duration: number;
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  meetingLink?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Chat room interface
+export interface ChatRoom {
+  id: string;
+  userId: string;
+  consultantId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Chat message interface
+export interface ChatMessage {
+  id: string;
+  chatRoomId: string;
+  senderId: string;
+  message: string;
+  isRead: boolean;
+  createdAt?: Date;
 }
 
 // Schema types
@@ -229,6 +429,18 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect & {
   settings?: UserSettings;
 };
+
+export type InsertConsultant = typeof consultants.$inferInsert;
+export type ConsultantType = typeof consultants.$inferSelect;
+
+export type InsertAppointment = typeof appointments.$inferInsert;
+export type AppointmentType = typeof appointments.$inferSelect;
+
+export type InsertChatRoom = typeof chatRooms.$inferInsert;
+export type ChatRoomType = typeof chatRooms.$inferSelect;
+
+export type InsertChatMessage = typeof chatMessages.$inferInsert;
+export type ChatMessageType = typeof chatMessages.$inferSelect;
 
 export type InsertPatent = typeof patents.$inferInsert;
 export type Patent = typeof patents.$inferSelect;
@@ -247,6 +459,9 @@ export type BlockchainTransaction = typeof blockchainTransactions.$inferSelect;
 
 export type InsertPatentActivity = typeof patentActivity.$inferInsert;
 export type PatentActivity = typeof patentActivity.$inferSelect;
+
+export type InsertWalletConnection = typeof walletConnections.$inferInsert;
+export type WalletConnection = typeof walletConnections.$inferSelect;
 
 // Zod schemas for validation
 export const insertPatentSchema = createInsertSchema(patents).omit({

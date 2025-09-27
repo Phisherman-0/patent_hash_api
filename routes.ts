@@ -7,14 +7,15 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { storage } from './storage';
 import { requireAuth, register, login, logout, getCurrentUser } from './auth';
+import { requireUser, requireConsultant, requireAdmin, requireUserOrConsultant } from './roleMiddleware';
 import { aiService } from './services/aiService';
-import { hederaService } from './services/hederaService';
+import hederaService from './services/hederaService';
 import { Patent } from './shared/schema';
 import { pool } from './db';
 import { insertPatentSchema } from './shared/schema';
 import { db } from './db';
-import { users } from './shared/schema';
-import { eq } from 'drizzle-orm';
+import { users, walletConnections, consultants, appointments } from './shared/schema';
+import { eq, and } from 'drizzle-orm';
 
 // Configure multer for file uploads
 const upload = multer({
@@ -165,6 +166,84 @@ export async function setupRoutes(app: Express): Promise<Server> {
       res.json(userWithoutPassword);
     } catch (error) {
       console.error('Error updating profile:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Consultant profile routes
+  app.post('/api/consultants/profile', requireAuth, requireConsultant, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+      const { specialization, bio, experienceYears, hourlyRate, availability } = req.body;
+
+      // Check if consultant profile already exists
+      const existingConsultant = await storage.getConsultantByUserId(userId);
+      
+      let consultant;
+      if (existingConsultant) {
+        // Update existing consultant profile
+        consultant = await storage.updateConsultant(existingConsultant.id, {
+          specialization,
+          bio,
+          experienceYears,
+          hourlyRate,
+          availability,
+          updatedAt: new Date()
+        });
+      } else {
+        // Create new consultant profile
+        consultant = await storage.createConsultant({
+          userId,
+          specialization,
+          bio,
+          experienceYears,
+          hourlyRate,
+          availability
+        });
+      }
+
+      res.json(consultant);
+    } catch (error) {
+      console.error('Error updating consultant profile:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  app.get('/api/consultants/profile', requireAuth, requireConsultant, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+      const consultant = await storage.getConsultantByUserId(userId);
+      
+      if (!consultant) {
+        return res.status(404).json({ message: 'Consultant profile not found' });
+      }
+
+      res.json(consultant);
+    } catch (error) {
+      console.error('Error fetching consultant profile:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get all consultants (public endpoint)
+  app.get('/api/consultants', async (req, res) => {
+    try {
+      const consultants = await storage.getAllConsultants();
+      res.json(consultants);
+    } catch (error) {
+      console.error('Error fetching consultants:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get consultants by specialization
+  app.get('/api/consultants/specialization/:specialization', async (req, res) => {
+    try {
+      const { specialization } = req.params;
+      const consultants = await storage.getConsultantsBySpecialization(specialization);
+      res.json(consultants);
+    } catch (error) {
+      console.error('Error fetching consultants by specialization:', error);
       res.status(500).json({ message: 'Internal server error' });
     }
   });
@@ -373,44 +452,30 @@ export async function setupRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Store patent hash on Hedera blockchain
+        // Store patent hash (HashPack integration - blockchain transactions handled by frontend)
         try {
-          console.log(`🔗 Attempting to store patent ${patent.id} on Hedera blockchain...`);
+          console.log(`📝 Calculating hash for patent ${patent.id}...`);
           
-          // Get user's wallet configuration
-          const user = await storage.getUserById(userId);
-          const walletConfig = user?.settings?.walletConfig;
+          // Calculate file hash for patent verification
+          const fileHash = hederaService.calculateFileHash(req.files[0].path);
           
-          // Wallet is guaranteed to exist at this point
-          if (walletConfig) {
-            const hederaResult = await hederaService.storePatentHashWithWallet(
-              patent.id, 
-              req.files[0].path,
-              walletConfig
-            );
-            
-            // Update patent with Hedera information
-            await storage.updatePatent(patent.id, {
-              hederaTopicId: hederaResult.topicId,
-              hederaMessageId: hederaResult.messageId,
-              hederaTransactionId: hederaResult.transactionId,
-              hashValue: hederaResult.hash,
-            });
-            
-            console.log('✅ Patent successfully stored on Hedera blockchain:', hederaResult);
-          } else {
-            throw new Error('Wallet configuration missing during blockchain storage');
-          }
-        } catch (hederaError: any) {
-          console.error('❌ Hedera blockchain storage failed:', hederaError.message);
-          
-          // Store error details but continue without blockchain storage
+          // Update patent with calculated hash
           await storage.updatePatent(patent.id, {
-            hashValue: crypto.createHash('sha256').update(fs.readFileSync(req.files[0].path)).digest('hex'),
-            hederaError: hederaError.message
+            hashValue: fileHash,
           });
           
-          console.log('⚠️  Patent saved without blockchain verification due to Hedera error');
+          console.log('✅ Patent hash calculated and stored:', fileHash);
+        } catch (error: any) {
+          console.error('❌ Hash calculation failed:', error.message);
+          
+          // Fallback hash calculation
+          const fallbackHash = crypto.createHash('sha256').update(fs.readFileSync(req.files[0].path)).digest('hex');
+          await storage.updatePatent(patent.id, {
+            hashValue: fallbackHash,
+            hederaError: error.message
+          });
+          
+          console.log('⚠️  Patent saved with fallback hash calculation');
         }
       }
 
@@ -686,6 +751,7 @@ export async function setupRoutes(app: Express): Promise<Server> {
         accountId,
         privateKey, // In production, this should be encrypted
         network,
+        walletType: 'legacy' as const,
         configuredAt: new Date().toISOString()
       };
 
@@ -717,7 +783,10 @@ export async function setupRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { privateKey, ...walletInfo } = user.settings.walletConfig;
+      const walletConfig = user.settings.walletConfig;
+      const { privateKey, ...walletInfo } = 'privateKey' in walletConfig ? 
+        walletConfig : 
+        { ...walletConfig, privateKey: undefined };
       res.json({
         isConfigured: true,
         ...walletInfo
@@ -788,12 +857,22 @@ export async function setupRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserById(userId);
       const walletConfig = user?.settings?.walletConfig;
       
-      if (!walletConfig || !walletConfig.accountId || !walletConfig.privateKey) {
+      if (!walletConfig || !walletConfig.accountId) {
         return res.status(400).json({ message: "Wallet not configured. Please configure your Hedera wallet first." });
       }
 
-      // Mint NFT on Hedera with user's wallet
-      const nftResult = await hederaService.mintPatentNFT(patent, walletConfig);
+      // Check if it's a legacy wallet with private key
+      if (walletConfig.walletType === 'legacy' && !('privateKey' in walletConfig && walletConfig.privateKey)) {
+        return res.status(400).json({ message: "Legacy wallet requires private key. Please reconfigure your wallet." });
+      }
+
+      // For now, skip NFT minting for HashPack wallets (requires transaction signing)
+      if (walletConfig.walletType === 'hashpack') {
+        return res.status(400).json({ message: "NFT minting for HashPack wallets requires transaction signing implementation." });
+      }
+
+      // Mint NFT on Hedera with legacy wallet
+      const nftResult = await hederaService.mintPatentNFTWithWallet(patent, walletConfig);
 
       // Update patent with NFT information
       await storage.updatePatent(req.params.patentId, {
@@ -998,6 +1077,101 @@ export async function setupRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // HashPack wallet connection routes
+  app.post('/api/wallet/hashpack/connect', requireAuth, async (req: any, res) => {
+    try {
+      const { accountId, network, sessionData } = req.body;
+      const userId = req.user.id;
+
+      if (!accountId || !network) {
+        return res.status(400).json({ message: 'Account ID and network are required' });
+      }
+
+      // Store HashPack wallet info in user settings as fallback
+      const hashPackConfig = {
+        walletType: 'hashpack',
+        accountId,
+        network,
+        sessionData: sessionData || {},
+        lastConnected: new Date().toISOString(),
+        isActive: true
+      };
+
+      // Update user settings with HashPack wallet config
+      const user = await storage.getUserById(userId);
+      const currentSettings = user?.settings || {};
+      const updatedSettings = {
+        ...currentSettings,
+        hashPackWallet: hashPackConfig
+      };
+
+      await storage.updateUserSettings(userId, updatedSettings);
+
+      res.json({
+        success: true,
+        message: 'HashPack wallet connected successfully',
+        connection: {
+          accountId: hashPackConfig.accountId,
+          network: hashPackConfig.network,
+          walletType: hashPackConfig.walletType
+        }
+      });
+    } catch (error) {
+      console.error('Error connecting HashPack wallet:', error);
+      res.status(500).json({ message: 'Failed to connect HashPack wallet' });
+    }
+  });
+
+  app.get('/api/wallet/hashpack/status', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      // Get HashPack wallet from user settings
+      const user = await storage.getUserById(userId);
+      const hashPackWallet = user?.settings?.hashPackWallet;
+
+      // Validate that we have a proper connection with account info
+      if (!hashPackWallet || !hashPackWallet.isActive || !hashPackWallet.accountId) {
+        return res.json({
+          isConnected: false,
+          message: 'No active HashPack wallet connection'
+        });
+      }
+
+      res.json({
+        isConnected: true,
+        accountId: hashPackWallet.accountId,
+        network: hashPackWallet.network,
+        lastConnected: hashPackWallet.lastConnected,
+        sessionData: hashPackWallet.sessionData
+      });
+    } catch (error) {
+      console.error('Error checking HashPack wallet status:', error);
+      res.status(500).json({ message: 'Failed to check HashPack wallet status' });
+    }
+  });
+
+  app.delete('/api/wallet/hashpack/disconnect', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      // Remove HashPack wallet from user settings
+      const user = await storage.getUserById(userId);
+      if (user?.settings?.hashPackWallet) {
+        const { hashPackWallet, ...otherSettings } = user.settings;
+        await storage.updateUserSettings(userId, otherSettings);
+      }
+
+      res.json({
+        success: true,
+        message: 'HashPack wallet disconnected successfully'
+      });
+    } catch (error) {
+      console.error('Error disconnecting HashPack wallet:', error);
+      res.status(500).json({ message: 'Failed to disconnect HashPack wallet' });
+    }
+  });
+
   // Search routes
   app.get('/api/search/patents', requireAuth, async (req: any, res) => {
     try {
@@ -1013,6 +1187,406 @@ export async function setupRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error searching patents:", error);
       res.status(500).json({ message: "Failed to search patents" });
+    }
+  });
+
+  // HashPack transaction routes
+  const { setupHashPackRoutes } = await import('./routes/hashpackRoutes');
+  setupHashPackRoutes(app);
+
+  // Appointment routes
+  // Book appointment (only for users)
+  app.post('/api/appointments/book', requireAuth, requireUser, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+      const { consultantId, title, description, appointmentDate, duration } = req.body;
+
+      // Verify consultant exists
+      const consultant = await storage.getConsultant(consultantId);
+      if (!consultant) {
+        return res.status(404).json({ message: 'Consultant not found' });
+      }
+
+      // Create appointment
+      const appointment = await storage.createAppointment({
+        userId,
+        consultantId,
+        title,
+        description,
+        appointmentDate: new Date(appointmentDate),
+        duration,
+        status: 'pending'
+      });
+
+      res.status(201).json(appointment);
+    } catch (error) {
+      console.error('Error booking appointment:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get user's appointments
+  app.get('/api/appointments/user', requireAuth, requireUser, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+      const appointments = await storage.getAppointmentsByUser(userId);
+      res.json(appointments);
+    } catch (error) {
+      console.error('Error fetching user appointments:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get consultant's appointments
+  app.get('/api/appointments/consultant', requireAuth, requireConsultant, async (req: any, res) => {
+    try {
+      const consultant = await storage.getConsultantByUserId(req.user!.id);
+      if (!consultant) {
+        // If consultant profile doesn't exist, return empty array instead of error
+        return res.json([]);
+      }
+
+      const appointments = await storage.getAppointmentsByConsultant(consultant.id);
+      res.json(appointments);
+    } catch (error) {
+      console.error('Error fetching consultant appointments:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Update appointment status (consultant can confirm/cancel)
+  app.put('/api/appointments/:id/status', requireAuth, requireConsultant, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, meetingLink } = req.body;
+
+      // Verify appointment exists and belongs to consultant
+      const consultant = await storage.getConsultantByUserId(req.user!.id);
+      if (!consultant) {
+        return res.status(404).json({ message: 'Consultant profile not found' });
+      }
+
+      const appointment = await storage.getAppointment(id);
+      if (!appointment || appointment.consultantId !== consultant.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Update appointment
+      const updatedAppointment = await storage.updateAppointment(id, {
+        status,
+        meetingLink,
+        updatedAt: new Date()
+      });
+
+      if (!updatedAppointment) {
+        return res.status(404).json({ message: 'Appointment not found' });
+      }
+
+      res.json(updatedAppointment);
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Cancel appointment (user can cancel their own appointments)
+  app.delete('/api/appointments/:id', requireAuth, requireUser, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user!.id;
+
+      // Verify appointment exists and belongs to user
+      const appointment = await storage.getAppointment(id);
+      if (!appointment || appointment.userId !== userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Delete appointment
+      await storage.deleteAppointment(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error canceling appointment:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Chat routes
+  // Create or get chat room
+  app.post('/api/chat/room', requireAuth, requireUserOrConsultant, async (req: any, res) => {
+    try {
+      const { userId, consultantId } = req.body;
+      
+      // Determine participant IDs
+      const participantUserId = req.user!.role === 'user' ? req.user!.id : userId;
+      const participantConsultantId = req.user!.role === 'consultant' ? 
+        (await storage.getConsultantByUserId(req.user!.id))?.id : consultantId;
+
+      if (!participantUserId || !participantConsultantId) {
+        return res.status(400).json({ message: 'User ID and consultant ID are required' });
+      }
+
+      // Verify consultant exists
+      const consultant = await storage.getConsultant(participantConsultantId);
+      if (!consultant) {
+        return res.status(404).json({ message: 'Consultant not found' });
+      }
+
+      // Create or get chat room
+      const chatRoom = await storage.createChatRoom(participantUserId, participantConsultantId);
+      res.json(chatRoom);
+    } catch (error) {
+      console.error('Error creating chat room:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get chat rooms for user
+  app.get('/api/chat/rooms', requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user!.id;
+      let chatRooms;
+
+      if (req.user!.role === 'user') {
+        chatRooms = await storage.getChatRoomsByUser(userId);
+      } else if (req.user!.role === 'consultant') {
+        const consultant = await storage.getConsultantByUserId(userId);
+        if (!consultant) {
+          // If consultant profile doesn't exist, return empty array instead of error
+          return res.json([]);
+        }
+        chatRooms = await storage.getChatRoomsByConsultant(consultant.id);
+      } else {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      res.json(chatRooms);
+    } catch (error) {
+      console.error('Error fetching chat rooms:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get chat messages for a room
+  app.get('/api/chat/messages/:roomId', requireAuth, async (req: any, res) => {
+    try {
+      const { roomId } = req.params;
+      const userId = req.user!.id;
+
+      // Verify user has access to this chat room
+      const chatRoom = await storage.getChatRoom(roomId);
+      if (!chatRoom) {
+        return res.status(404).json({ message: 'Chat room not found' });
+      }
+
+      // Check if user is a participant in the chat room
+      const isParticipant = chatRoom.userId === userId || 
+        (await storage.getConsultantByUserId(userId))?.id === chatRoom.consultantId;
+        
+      if (!isParticipant) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const messages = await storage.getChatMessages(roomId);
+      res.json(messages);
+    } catch (error) {
+      console.error('Error fetching chat messages:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Send chat message
+  app.post('/api/chat/messages', requireAuth, async (req: any, res) => {
+    try {
+      const { chatRoomId, message } = req.body;
+      const senderId = req.user!.id;
+
+      // Verify chat room exists
+      const chatRoom = await storage.getChatRoom(chatRoomId);
+      if (!chatRoom) {
+        return res.status(404).json({ message: 'Chat room not found' });
+      }
+
+      // Check if user is a participant in the chat room
+      const isParticipant = chatRoom.userId === senderId || 
+        (await storage.getConsultantByUserId(senderId))?.id === chatRoom.consultantId;
+        
+      if (!isParticipant) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Create message
+      const chatMessage = await storage.createChatMessage({
+        chatRoomId,
+        senderId,
+        message
+      });
+
+      res.status(201).json(chatMessage);
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Admin routes
+  // Get all users (admin only)
+  app.get('/api/admin/users', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const allUsers = await db.select().from(users);
+      
+      // Remove password hashes from response
+      const usersWithoutPasswords = allUsers.map(user => {
+        const { passwordHash, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+
+      res.json(usersWithoutPasswords);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Update user role (admin only)
+  app.put('/api/admin/users/:id/role', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      // Validate role
+      if (!['user', 'consultant', 'admin'].includes(role)) {
+        return res.status(400).json({ message: 'Invalid role' });
+      }
+
+      // Update user role
+      const [updatedUser] = await db.update(users)
+        .set({ role, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Remove password hash from response
+      const { passwordHash, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get all appointments (admin only)
+  app.get('/api/admin/appointments', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const allAppointments = await db.select().from(appointments);
+      res.json(allAppointments);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Delete user (admin only)
+  app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      // Delete user
+      await db.delete(users).where(eq(users.id, id));
+
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get all consultants (admin only)
+  app.get('/api/admin/consultants', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const allConsultants = await storage.getAllConsultants();
+      res.json(allConsultants);
+    } catch (error) {
+      console.error('Error fetching consultants:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get unverified consultants (admin only)
+  app.get('/api/admin/consultants/unverified', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const unverifiedConsultants = await storage.getUnverifiedConsultants();
+      res.json(unverifiedConsultants);
+    } catch (error) {
+      console.error('Error fetching unverified consultants:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Verify consultant (admin only)
+  app.put('/api/admin/consultants/:id/verify', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      // Verify consultant
+      const verifiedConsultant = await storage.verifyConsultant(id, req.user.id, notes);
+
+      if (!verifiedConsultant) {
+        return res.status(404).json({ message: 'Consultant not found' });
+      }
+
+      res.json(verifiedConsultant);
+    } catch (error) {
+      console.error('Error verifying consultant:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Reject consultant application (admin only)
+  app.put('/api/admin/consultants/:id/reject', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      // Reject consultant application
+      const rejectedConsultant = await storage.rejectConsultant(id, req.user.id, notes);
+
+      if (!rejectedConsultant) {
+        return res.status(404).json({ message: 'Consultant not found' });
+      }
+
+      res.json(rejectedConsultant);
+    } catch (error) {
+      console.error('Error rejecting consultant:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Get consultant verification status (admin only)
+  app.get('/api/admin/consultants/:id/status', requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get consultant
+      const consultant = await storage.getConsultant(id);
+
+      if (!consultant) {
+        return res.status(404).json({ message: 'Consultant not found' });
+      }
+
+      res.json({
+        id: consultant.id,
+        isVerified: consultant.isVerified,
+        verifiedBy: consultant.verifiedBy,
+        verifiedAt: consultant.verifiedAt,
+        verificationNotes: consultant.verificationNotes
+      });
+    } catch (error) {
+      console.error('Error fetching consultant status:', error);
+      res.status(500).json({ message: 'Internal server error' });
     }
   });
 

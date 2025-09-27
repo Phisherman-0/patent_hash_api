@@ -1,4 +1,4 @@
-import type { User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, PatentActivity, InsertPatentActivity, UserSettings, Consultant, InsertConsultant, Appointment, InsertAppointment, ChatRoom, ChatMessage, InsertChatMessage } from './shared/schema';
+import type { User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, PatentActivity, InsertPatentActivity, UserSettings } from './shared/schema';
 export interface IStorage {
     createUser(user: InsertUser): Promise<User>;
     getUser(id: string): Promise<User | undefined>;
@@ -37,32 +37,6 @@ export interface IStorage {
         count: number;
         percentage: number;
     }>>;
-    createConsultant(consultant: InsertConsultant): Promise<Consultant>;
-    getConsultant(id: string): Promise<Consultant | undefined>;
-    getConsultantByUserId(userId: string): Promise<Consultant | undefined>;
-    updateConsultant(id: string, updates: Partial<InsertConsultant>): Promise<Consultant | undefined>;
-    deleteConsultant(id: string): Promise<void>;
-    getAllConsultants(): Promise<Consultant[]>;
-    getConsultantsBySpecialization(specialization: string): Promise<Consultant[]>;
-    getVerifiedConsultants(): Promise<Consultant[]>;
-    getUnverifiedConsultants(): Promise<Consultant[]>;
-    verifyConsultant(id: string, adminUserId: string, notes?: string): Promise<Consultant | undefined>;
-    rejectConsultant(id: string, adminUserId: string, notes?: string): Promise<Consultant | undefined>;
-    createAppointment(appointment: InsertAppointment): Promise<Appointment>;
-    getAppointment(id: string): Promise<Appointment | undefined>;
-    getAppointmentsByUser(userId: string): Promise<Appointment[]>;
-    getAppointmentsByConsultant(consultantId: string): Promise<Appointment[]>;
-    updateAppointment(id: string, updates: Partial<InsertAppointment>): Promise<Appointment | undefined>;
-    deleteAppointment(id: string): Promise<void>;
-    createChatRoom(userId: string, consultantId: string): Promise<ChatRoom>;
-    getChatRoom(id: string): Promise<ChatRoom | undefined>;
-    getChatRoomByParticipants(userId: string, consultantId: string): Promise<ChatRoom | undefined>;
-    getChatRoomsByUser(userId: string): Promise<ChatRoom[]>;
-    getChatRoomsByConsultant(consultantId: string): Promise<ChatRoom[]>;
-    deleteChatRoom(id: string): Promise<void>;
-    createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
-    getChatMessages(chatRoomId: string): Promise<ChatMessage[]>;
-    markMessageAsRead(id: string): Promise<ChatMessage | undefined>;
 }
 export declare class DatabaseStorage implements IStorage {
     getUser(id: string): Promise<User | undefined>;
@@ -99,32 +73,6 @@ export declare class DatabaseStorage implements IStorage {
         blockchainVerified: number;
         portfolioValue: string;
     }>;
-    createConsultant(consultant: InsertConsultant): Promise<Consultant>;
-    getConsultant(id: string): Promise<Consultant | undefined>;
-    getConsultantByUserId(userId: string): Promise<Consultant | undefined>;
-    updateConsultant(id: string, updates: Partial<InsertConsultant>): Promise<Consultant | undefined>;
-    deleteConsultant(id: string): Promise<void>;
-    getAllConsultants(): Promise<Consultant[]>;
-    getConsultantsBySpecialization(specialization: string): Promise<Consultant[]>;
-    getVerifiedConsultants(): Promise<Consultant[]>;
-    getUnverifiedConsultants(): Promise<Consultant[]>;
-    verifyConsultant(id: string, adminUserId: string, notes?: string): Promise<Consultant | undefined>;
-    rejectConsultant(id: string, adminUserId: string, notes?: string): Promise<Consultant | undefined>;
-    createAppointment(appointment: InsertAppointment): Promise<Appointment>;
-    getAppointment(id: string): Promise<Appointment | undefined>;
-    getAppointmentsByUser(userId: string): Promise<Appointment[]>;
-    getAppointmentsByConsultant(consultantId: string): Promise<Appointment[]>;
-    updateAppointment(id: string, updates: Partial<InsertAppointment>): Promise<Appointment | undefined>;
-    deleteAppointment(id: string): Promise<void>;
-    createChatRoom(userId: string, consultantId: string): Promise<ChatRoom>;
-    getChatRoom(id: string): Promise<ChatRoom | undefined>;
-    getChatRoomByParticipants(userId: string, consultantId: string): Promise<ChatRoom | undefined>;
-    getChatRoomsByUser(userId: string): Promise<ChatRoom[]>;
-    getChatRoomsByConsultant(consultantId: string): Promise<ChatRoom[]>;
-    deleteChatRoom(id: string): Promise<void>;
-    createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
-    getChatMessages(chatRoomId: string): Promise<ChatMessage[]>;
-    markMessageAsRead(id: string): Promise<ChatMessage | undefined>;
     getPatentCategoryStats(userId: string): Promise<Array<{
         category: string;
         count: number;
@@ -132,4 +80,4 @@ export declare class DatabaseStorage implements IStorage {
     }>>;
 }
 export declare const storage: DatabaseStorage;
-//# sourceMappingURL=storage.d.ts.map
+//# sourceMappingURL=storage_original.d.ts.map

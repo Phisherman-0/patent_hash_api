@@ -27,8 +27,8 @@ export async function requireAuth(req, res, next) {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            profileImageUrl: null,
-            role: null,
+            profileImageUrl: user.profileImageUrl,
+            role: user.role,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         };
@@ -45,6 +45,7 @@ const userRegisterSchema = z.object({
     lastName: z.string().min(1, "Last name is required"),
     email: z.string().email("Invalid email address"),
     password: z.string().min(6, "Password must be at least 6 characters"),
+    role: z.enum(["user", "consultant"]).optional().default("user"),
 });
 // Register endpoint
 export async function register(req, res) {
@@ -57,11 +58,12 @@ export async function register(req, res) {
         }
         // Hash password
         const hashedPassword = await hashPassword(validatedData.password);
-        // Create user
-        const { password, ...userDataWithoutPassword } = validatedData;
+        // Create user with specified role
+        const { password, role, ...userDataWithoutPassword } = validatedData;
         const newUser = await storage.createUser({
             ...userDataWithoutPassword,
             passwordHash: hashedPassword,
+            role: role || "user", // Default to "user" if no role specified
         });
         // Set session
         req.session.userId = newUser.id;

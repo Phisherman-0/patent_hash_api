@@ -19,7 +19,14 @@ const corsOrigins = IS_PRODUCTION
       'http://localhost:3000',
       'http://localhost:3001', 
       'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001'
+      'http://127.0.0.1:3001',
+      // Allow network access for development
+      'http://192.168.1.72:3000',
+      'http://192.168.1.*:3000',
+      // Generic network access patterns
+      /^http:\/\/192\.168\.\d+\.\d+:3000$/,
+      /^http:\/\/10\.\d+\.\d+\.\d+:3000$/,
+      /^http:\/\/172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+:3000$/
     ];
 
 app.use(cors({
@@ -98,11 +105,30 @@ if (IS_PRODUCTION) {
   const port = parseInt(process.env.PORT || '5000', 10);
   const serverInstance = server.listen({
     port,
-    host: "0.0.0.0",
+    host: "0.0.0.0", // Listen on all interfaces
     reusePort: true,
-  }, () => {
+  }, async () => {
     console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
     console.log(`💡 Type 'rs' and press Enter to restart the server`);
+    
+    // Log network access information
+    if (!IS_PRODUCTION) {
+      const os = await import('os');
+      const networkInterfaces = os.networkInterfaces();
+      console.log('\n🌐 Network access URLs:');
+      console.log(`   Local: http://localhost:${port}`);
+      
+      Object.keys(networkInterfaces).forEach(interfaceName => {
+        const interfaces = networkInterfaces[interfaceName];
+        if (interfaces) {
+          interfaces.forEach(interfaceInfo => {
+            if (!interfaceInfo.internal && interfaceInfo.family === 'IPv4') {
+              console.log(`   Network: http://${interfaceInfo.address}:${port}`);
+            }
+          });
+        }
+      });
+    }
   });
 
   // Add restart functionality

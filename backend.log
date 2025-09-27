@@ -1,0 +1,288 @@
+
+> patent-hash-backend@1.0.0 dev
+> NODE_ENV=development tsx watch index.ts
+
+[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+PUT /api/auth/user/settings 200 in 722ms :: {"message":"Settings updated succes…
+GET /api/auth/user 304 in 59ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 251ms :: []
+PUT /api/auth/user/settings 200 in 36ms :: {"message":"Settings updated success…
+GET /api/chat/rooms 304 in 34ms :: []
+GET /api/chat/rooms 200 in 26ms :: []
+PUT /api/auth/user/settings 200 in 112ms :: {"message":"Settings updated succes…
+GET /api/auth/user 304 in 62ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 66ms :: []
+GET /api/chat/rooms 304 in 28ms :: []
+GET /api/auth/user 304 in 28ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 39ms :: []
+GET /api/chat/rooms 200 in 18ms :: []
+GET /api/auth/user 304 in 15ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 31ms :: []
+GET /api/chat/rooms 200 in 55ms :: []
+GET /api/chat/rooms 304 in 23ms :: []
+GET /api/chat/rooms 200 in 29ms :: []
+PUT /api/auth/user/settings 200 in 48ms :: {"message":"Settings updated success…
+GET /api/auth/user 304 in 20ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/auth/user 200 in 21ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 38ms :: []
+GET /api/chat/rooms 304 in 33ms :: []
+GET /api/auth/user 200 in 14ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 58ms :: []
+GET /api/chat/rooms 200 in 19ms :: []
+GET /api/auth/user 304 in 38ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 28ms :: []
+GET /api/chat/rooms 200 in 44ms :: []
+GET /api/chat/rooms 304 in 17ms :: []
+GET /api/chat/rooms 200 in 21ms :: []
+PUT /api/auth/user/settings 200 in 36ms :: {"message":"Settings updated success…
+GET /api/auth/user 304 in 20ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/auth/user 200 in 24ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 30ms :: []
+GET /api/chat/rooms 200 in 23ms :: []
+GET /api/auth/user 200 in 24ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 154ms :: []
+GET /api/auth/user 200 in 72ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+HEAD /api/consultants 200 in 23ms :: []
+HEAD /api/chat/rooms 401 in 2ms :: {"message":"Unauthorized"}
+HEAD /api/chat/rooms 401 in 2ms :: {"message":"Unauthorized"}
+GET /api/chat/rooms 200 in 96ms :: []
+GET /api/chat/rooms 200 in 19ms :: []
+GET /api/auth/user 304 in 36ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+PUT /api/auth/user/settings 200 in 47ms :: {"message":"Settings updated success…
+GET /api/chat/rooms 200 in 59ms :: []
+GET /api/chat/rooms 200 in 54ms :: []
+GET /api/chat/rooms 200 in 61ms :: []
+GET /api/chat/rooms 304 in 25ms :: []
+GET /api/chat/rooms 200 in 33ms :: []
+GET /api/auth/user 200 in 20ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/auth/user 200 in 30ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/consultants 200 in 15ms :: []
+GET /api/chat/rooms 304 in 109ms :: []
+PUT /api/auth/user/settings 200 in 58ms :: {"message":"Settings updated success…
+GET /api/chat/rooms 200 in 47ms :: []
+GET /api/chat/rooms 200 in 39ms :: []
+PUT /api/auth/user/settings 200 in 38ms :: {"message":"Settings updated success…
+GET /api/chat/rooms 200 in 59ms :: []
+GET /api/auth/user 304 in 22ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/auth/user 200 in 30ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 46ms :: []
+GET /api/chat/rooms 200 in 21ms :: []
+PUT /api/auth/user/settings 200 in 41ms :: {"message":"Settings updated success…
+GET /api/auth/user 200 in 22ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 86ms :: []
+GET /api/chat/rooms 200 in 106ms :: []
+GET /api/auth/user 304 in 12ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 39ms :: []
+GET /api/chat/rooms 304 in 12ms :: []
+PUT /api/auth/user/settings 200 in 30ms :: {"message":"Settings updated success…
+GET /api/auth/user 200 in 119ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28"…
+GET /api/chat/rooms 200 in 43ms :: []
+GET /api/chat/rooms 304 in 15ms :: []
+PUT /api/auth/user/settings 200 in 46ms :: {"message":"Settings updated success…
+GET /api/auth/user 304 in 19ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 29ms :: []
+GET /api/chat/rooms 200 in 27ms :: []
+PUT /api/auth/user/settings 200 in 39ms :: {"message":"Settings updated success…
+GET /api/auth/user 200 in 26ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 304 in 92ms :: []
+GET /api/chat/rooms 304 in 33ms :: []
+POST /api/auth/login 200 in 678ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b2…
+GET /api/dashboard/stats 200 in 40ms :: {"totalPatents":"2","pendingReviews":"0…
+GET /api/dashboard/activities 200 in 285ms :: [{"id":"783d48dc-c1c1-4a1a-9a40-d…
+GET /api/appointments/user 200 in 62ms :: []
+GET /api/chat/rooms 304 in 180ms :: []
+GET /api/auth/user 200 in 60ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b71",…
+GET /api/auth/user 304 in 13ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b71",…
+GET /api/consultants/profile 404 in 21ms :: {"message":"Consultant profile not …
+GET /api/consultants/profile 404 in 25ms :: {"message":"Consultant profile not …
+GET /api/auth/user 200 in 27ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b71",…
+GET /api/chat/rooms 404 in 271ms :: {"message":"Consultant profile not found"}
+GET /api/chat/rooms 404 in 330ms :: {"message":"Consultant profile not found"}
+GET /api/dashboard/stats 304 in 41ms :: {"totalPatents":"0","pendingReviews":"0…
+GET /api/dashboard/stats 200 in 61ms :: {"totalPatents":"0","pendingReviews":"0…
+PUT /api/auth/user/settings 200 in 804ms :: {"message":"Settings updated succes…
+GET /api/dashboard/stats 304 in 23ms :: {"totalPatents":"0","pendingReviews":"0…
+GET /api/consultants/profile 404 in 63ms :: {"message":"Consultant profile not …
+GET /api/consultants/profile 404 in 81ms :: {"message":"Consultant profile not …
+GET /api/auth/user 304 in 120ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b71"…
+GET /api/auth/user 200 in 312ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b71"…
+GET /api/auth/user 200 in 42ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b71",…
+GET /api/consultants/profile 404 in 22ms :: {"message":"Consultant profile not …
+POST /api/auth/logout 200 in 41ms :: {"message":"Logged out successfully"}
+POST /api/auth/login 200 in 660ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b2…
+GET /api/dashboard/category-stats 200 in 193ms :: [{"category":"medical_technol…
+PUT /api/auth/user/settings 200 in 205ms :: {"message":"Settings updated succes…
+GET /api/consultants 200 in 41ms :: []
+GET /api/consultants 200 in 96ms :: []
+GET /api/consultants 304 in 33ms :: []
+GET /api/consultants 200 in 72ms :: []
+GET /api/appointments/user 200 in 81ms :: []
+GET /api/consultants 304 in 18ms :: []
+GET /api/consultants 200 in 26ms :: []
+GET /api/dashboard/stats 304 in 54ms :: {"totalPatents":"2","pendingReviews":"0…
+GET /api/auth/user 200 in 48ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+PUT /api/auth/user/settings 200 in 36ms :: {"message":"Settings updated success…
+GET /api/auth/user 304 in 21ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/consultants 200 in 39ms :: []
+10:53:36 AM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+GET /api/dashboard/category-stats 304 in 303ms :: [{"category":"medical_technol…
+PUT /api/auth/user/settings 200 in 340ms :: {"message":"Settings updated succes…
+POST /api/auth/login 200 in 601ms :: {"id":"9c42f946-d788-48ec-9165-907a74186b7…
+GET /api/dashboard/activities 200 in 34ms :: []
+PUT /api/auth/user/settings 200 in 37ms :: {"message":"Settings updated success…
+GET /api/appointments/consultant 404 in 29ms :: {"message":"Consultant profile …
+GET /api/appointments/consultant 404 in 35ms :: {"message":"Consultant profile …
+GET /api/chat/rooms 404 in 24ms :: {"message":"Consultant profile not found"}
+GET /api/chat/rooms 404 in 34ms :: {"message":"Consultant profile not found"}
+POST /api/auth/logout 200 in 42ms :: {"message":"Logged out successfully"}
+POST /api/auth/login 200 in 519ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b2…
+GET /api/dashboard/stats 200 in 24ms :: {"totalPatents":"2","pendingReviews":"0…
+GET /api/dashboard/activities 200 in 43ms :: [{"id":"783d48dc-c1c1-4a1a-9a40-d4…
+GET /api/dashboard/category-stats 200 in 49ms :: [{"category":"medical_technolo…
+PUT /api/auth/user/settings 200 in 31ms :: {"message":"Settings updated success…
+11:04:38 AM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+11:04:49 AM [tsx] change in ./routes.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 📡 version env with Radar: https://dotenvx.com/radar
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+11:04:59 AM [tsx] change in ./routes.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+11:16:08 AM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 📡 version env with Radar: https://dotenvx.com/radar
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+GET /api/appointments/user 304 in 148ms :: []
+GET /api/appointments/user 304 in 36ms :: []
+GET /api/consultants 304 in 56ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/consultants 304 in 37ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/consultants 200 in 43ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/appointments/user 200 in 60ms :: []
+GET /api/consultants 200 in 59ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/consultants 304 in 346ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+GET /api/auth/user 200 in 33ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/auth/user 304 in 42ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/appointments/user 200 in 89ms :: []
+GET /api/consultants 200 in 85ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/consultants 304 in 83ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+PUT /api/auth/user/settings 200 in 98ms :: {"message":"Settings updated success…
+GET /api/auth/user 200 in 23ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/consultants 200 in 59ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+PUT /api/auth/user/settings 200 in 68ms :: {"message":"Settings updated success…
+GET /api/auth/user 304 in 33ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/consultants 304 in 26ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/consultants 200 in 34ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+11:35:35 AM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+11:35:50 AM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+GET /api/consultants 200 in 117ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+GET /api/appointments/user 200 in 51ms :: []
+GET /api/consultants 200 in 40ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/chat/rooms 200 in 97ms :: []
+GET /api/consultants 200 in 60ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/consultants 200 in 386ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+GET /api/consultants 304 in 51ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+GET /api/appointments/user 304 in 114ms :: [{"id":"79ce83af-f010-4a8b-869b-c801…
+GET /api/appointments/user 304 in 36ms :: [{"id":"79ce83af-f010-4a8b-869b-c801d…
+GET /api/consultants 304 in 75ms :: [{"id":"1","userId":"9c42f946-d788-48ec-916…
+12:57:40 PM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+12:58:14 PM [tsx] change in ./storage.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+GET /api/appointments/user 200 in 950ms :: [{"id":"79ce83af-f010-4a8b-869b-c801…
+GET /api/consultants 200 in 1144ms :: [{"id":"1","userId":"9c42f946-d788-48ec-9…
+GET /api/appointments/user 200 in 1405ms :: [{"id":"79ce83af-f010-4a8b-869b-c80…
+GET /api/consultants 200 in 1602ms :: [{"id":"1","userId":"9c42f946-d788-48ec-9…
+GET /api/auth/user 200 in 128ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28"…
+GET /api/auth/user 304 in 28ms :: {"id":"73f0d68c-8d14-404a-974d-ac5f34513b28",…
+GET /api/chat/rooms 200 in 350ms :: []
+GET /api/consultants 304 in 176ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+GET /api/consultants 304 in 263ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+GET /api/consultants 200 in 349ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+PUT /api/auth/user/settings 200 in 114ms :: {"message":"Settings updated succes…
+PUT /api/auth/user/settings 200 in 121ms :: {"message":"Settings updated succes…
+GET /api/appointments/user 200 in 58ms :: [{"id":"79ce83af-f010-4a8b-869b-c801d…
+GET /api/consultants 200 in 199ms :: [{"id":"1","userId":"9c42f946-d788-48ec-91…
+PUT /api/auth/user/settings 200 in 24ms :: {"message":"Settings updated success…
+6:13:14 PM [tsx] change in ./routes.ts Restarting...
+c[dotenv@17.2.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+HederaService initialized. Use HashPack service for wallet operations.
+🚀 Server running on port 5000 (development)
+💡 Type 'rs' and press Enter to restart the server
+
+🌐 Network access URLs:
+   Local: http://localhost:5000
+   Network: http://192.168.1.72:5000
+GET /api/wallet/hashpack/status 401 in 23ms :: {"message":"Unauthorized"}
+GET /api/wallet/hashpack/status 401 in 5ms :: {"message":"Unauthorized"}
+GET /api/wallet/hashpack/status 401 in 3ms :: {"message":"Unauthorized"}
+GET /api/wallet/hashpack/status 401 in 1ms :: {"message":"Unauthorized"}
+GET /api/wallet/hashpack/status 401 in 2ms :: {"message":"Unauthorized"}
