@@ -1,7 +1,7 @@
 import { db } from './db';
 import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity, consultants, appointments, chatRooms, chatMessages } from './shared/schema';
 import type { User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, PatentActivity, InsertPatentActivity, UserSettings, Consultant, InsertConsultant, Appointment, InsertAppointment, ChatRoom, InsertChatRoom, ChatMessage, InsertChatMessage } from './shared/schema';
-import { eq, desc, and, ilike, sql, leftJoin } from "drizzle-orm";
+import { eq, desc, and, ilike, sql } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -444,13 +444,16 @@ export class DatabaseStorage implements IStorage {
 
   async getAllConsultants(): Promise<Consultant[]> {
     // Only return verified consultants
-    const consultantList = await db.select().from(consultants)
+    const consultantList = await db.select({
+      consultant: consultants,
+      user: users
+    }).from(consultants)
       .leftJoin(users, eq(consultants.userId, users.id))
       .where(eq(consultants.isVerified, true));
     
     return consultantList.map(result => {
-      const consultant = result.consultants;
-      const user = result.users;
+      const consultant = result.consultant;
+      const user = result.user;
       
       return {
         ...consultant,
@@ -627,14 +630,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAppointmentsByUser(userId: string): Promise<Appointment[]> {
-    const appointmentList = await db.select().from(appointments)
+    const appointmentList = await db.select({
+      appointment: appointments,
+      user: users
+    }).from(appointments)
       .leftJoin(users, eq(appointments.userId, users.id))
       .where(eq(appointments.userId, userId))
       .orderBy(desc(appointments.appointmentDate));
     
     return appointmentList.map(result => {
-      const appointment = result.appointments;
-      const user = result.users;
+      const appointment = result.appointment;
+      const user = result.user;
       
       return {
         ...appointment,
@@ -653,14 +659,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAppointmentsByConsultant(consultantId: string): Promise<Appointment[]> {
-    const appointmentList = await db.select().from(appointments)
+    const appointmentList = await db.select({
+      appointment: appointments,
+      user: users
+    }).from(appointments)
       .leftJoin(users, eq(appointments.userId, users.id))
       .where(eq(appointments.consultantId, consultantId))
       .orderBy(desc(appointments.appointmentDate));
     
     return appointmentList.map(result => {
-      const appointment = result.appointments;
-      const user = result.users;
+      const appointment = result.appointment;
+      const user = result.user;
       
       return {
         ...appointment,

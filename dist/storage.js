@@ -313,23 +313,38 @@ export class DatabaseStorage {
         await db.delete(consultants).where(eq(consultants.id, id));
     }
     async getAllConsultants() {
-        const consultantList = await db.select().from(consultants);
-        return consultantList.map(consultant => ({
-            ...consultant,
-            specialization: consultant.specialization ?? undefined,
-            bio: consultant.bio ?? undefined,
-            experienceYears: consultant.experienceYears ?? undefined,
-            hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
-                Number(consultant.hourlyRate) : undefined,
-            rating: consultant.rating !== null && consultant.rating !== undefined ?
-                Number(consultant.rating) : undefined,
-            isVerified: consultant.isVerified ?? false,
-            verifiedBy: consultant.verifiedBy ?? undefined,
-            verifiedAt: consultant.verifiedAt ?? undefined,
-            verificationNotes: consultant.verificationNotes ?? undefined,
-            createdAt: consultant.createdAt ?? undefined,
-            updatedAt: consultant.updatedAt ?? undefined,
-        }));
+        // Only return verified consultants
+        const consultantList = await db.select({
+            consultant: consultants,
+            user: users
+        }).from(consultants)
+            .leftJoin(users, eq(consultants.userId, users.id))
+            .where(eq(consultants.isVerified, true));
+        return consultantList.map(result => {
+            const consultant = result.consultant;
+            const user = result.user;
+            return {
+                ...consultant,
+                user: user ? {
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email
+                } : undefined,
+                specialization: consultant.specialization ?? undefined,
+                bio: consultant.bio ?? undefined,
+                experienceYears: consultant.experienceYears ?? undefined,
+                hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ?
+                    Number(consultant.hourlyRate) : undefined,
+                rating: consultant.rating !== null && consultant.rating !== undefined ?
+                    Number(consultant.rating) : undefined,
+                isVerified: consultant.isVerified ?? false,
+                verifiedBy: consultant.verifiedBy ?? undefined,
+                verifiedAt: consultant.verifiedAt ?? undefined,
+                verificationNotes: consultant.verificationNotes ?? undefined,
+                createdAt: consultant.createdAt ?? undefined,
+                updatedAt: consultant.updatedAt ?? undefined,
+            };
+        });
     }
     async getConsultantsBySpecialization(specialization) {
         const consultantList = await db.select().from(consultants).where(eq(consultants.specialization, specialization));
@@ -474,26 +489,56 @@ export class DatabaseStorage {
         };
     }
     async getAppointmentsByUser(userId) {
-        const appointmentList = await db.select().from(appointments).where(eq(appointments.userId, userId)).orderBy(desc(appointments.appointmentDate));
-        return appointmentList.map(appointment => ({
-            ...appointment,
-            description: appointment.description ?? undefined,
-            meetingLink: appointment.meetingLink ?? undefined,
-            status: appointment.status ?? 'pending',
-            createdAt: appointment.createdAt ?? undefined,
-            updatedAt: appointment.updatedAt ?? undefined,
-        }));
+        const appointmentList = await db.select({
+            appointment: appointments,
+            user: users
+        }).from(appointments)
+            .leftJoin(users, eq(appointments.userId, users.id))
+            .where(eq(appointments.userId, userId))
+            .orderBy(desc(appointments.appointmentDate));
+        return appointmentList.map(result => {
+            const appointment = result.appointment;
+            const user = result.user;
+            return {
+                ...appointment,
+                user: user ? {
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email
+                } : undefined,
+                description: appointment.description ?? undefined,
+                meetingLink: appointment.meetingLink ?? undefined,
+                status: appointment.status ?? 'pending',
+                createdAt: appointment.createdAt ?? undefined,
+                updatedAt: appointment.updatedAt ?? undefined,
+            };
+        });
     }
     async getAppointmentsByConsultant(consultantId) {
-        const appointmentList = await db.select().from(appointments).where(eq(appointments.consultantId, consultantId)).orderBy(desc(appointments.appointmentDate));
-        return appointmentList.map(appointment => ({
-            ...appointment,
-            description: appointment.description ?? undefined,
-            meetingLink: appointment.meetingLink ?? undefined,
-            status: appointment.status ?? 'pending',
-            createdAt: appointment.createdAt ?? undefined,
-            updatedAt: appointment.updatedAt ?? undefined,
-        }));
+        const appointmentList = await db.select({
+            appointment: appointments,
+            user: users
+        }).from(appointments)
+            .leftJoin(users, eq(appointments.userId, users.id))
+            .where(eq(appointments.consultantId, consultantId))
+            .orderBy(desc(appointments.appointmentDate));
+        return appointmentList.map(result => {
+            const appointment = result.appointment;
+            const user = result.user;
+            return {
+                ...appointment,
+                user: user ? {
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email
+                } : undefined,
+                description: appointment.description ?? undefined,
+                meetingLink: appointment.meetingLink ?? undefined,
+                status: appointment.status ?? 'pending',
+                createdAt: appointment.createdAt ?? undefined,
+                updatedAt: appointment.updatedAt ?? undefined,
+            };
+        });
     }
     async updateAppointment(id, updates) {
         const [updatedAppointment] = await db.update(appointments).set(updates).where(eq(appointments.id, id)).returning();

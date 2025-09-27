@@ -995,7 +995,8 @@ export async function setupRoutes(app) {
             // Get HashPack wallet from user settings
             const user = await storage.getUserById(userId);
             const hashPackWallet = user?.settings?.hashPackWallet;
-            if (!hashPackWallet || !hashPackWallet.isActive) {
+            // Validate that we have a proper connection with account info
+            if (!hashPackWallet || !hashPackWallet.isActive || !hashPackWallet.accountId) {
                 return res.json({
                     isConnected: false,
                     message: 'No active HashPack wallet connection'
@@ -1097,7 +1098,8 @@ export async function setupRoutes(app) {
         try {
             const consultant = await storage.getConsultantByUserId(req.user.id);
             if (!consultant) {
-                return res.status(404).json({ message: 'Consultant profile not found' });
+                // If consultant profile doesn't exist, return empty array instead of error
+                return res.json([]);
             }
             const appointments = await storage.getAppointmentsByConsultant(consultant.id);
             res.json(appointments);
@@ -1193,7 +1195,8 @@ export async function setupRoutes(app) {
             else if (req.user.role === 'consultant') {
                 const consultant = await storage.getConsultantByUserId(userId);
                 if (!consultant) {
-                    return res.status(404).json({ message: 'Consultant profile not found' });
+                    // If consultant profile doesn't exist, return empty array instead of error
+                    return res.json([]);
                 }
                 chatRooms = await storage.getChatRoomsByConsultant(consultant.id);
             }
