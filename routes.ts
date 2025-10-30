@@ -10,6 +10,7 @@ import { requireAuth, register, login, logout, getCurrentUser } from './auth';
 import { requireUser, requireConsultant, requireAdmin, requireUserOrConsultant } from './roleMiddleware';
 import { aiService } from './services/aiService';
 import hederaService from './services/hederaService';
+import walletRoutes from './routes/walletRoutes';
 import { Patent } from './shared/schema';
 import { pool } from './db';
 import { insertPatentSchema } from './shared/schema';
@@ -1193,6 +1194,9 @@ export async function setupRoutes(app: Express): Promise<Server> {
   // HashPack transaction routes
   const { setupHashPackRoutes } = await import('./routes/hashpackRoutes');
   setupHashPackRoutes(app);
+
+  // Wallet routes
+  app.use('/api/wallet', walletRoutes);
 
   // Appointment routes
   // Book appointment (only for users)
