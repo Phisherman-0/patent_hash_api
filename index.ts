@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { setupRoutes } from './routes';
+import { setupRoutes } from './routes/index';
 import { DatabaseStorage } from './storage';
 import dotenv from 'dotenv';
 
