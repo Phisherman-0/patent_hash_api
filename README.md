@@ -120,8 +120,8 @@ Before you begin, ensure you have:
 1️⃣ **Clone the repository**
 
 ```bash
-git clone https://github.com/<your-username>/patent-hash.git
-cd patent-hash/backend
+git clone https://github.com/Phisherman-0/patent_hash_api.git
+cd patent_hash_api
 ```
 
 2️⃣ **Install dependencies**
@@ -433,38 +433,6 @@ npm test -- patentController.test.ts
 
 ---
 
-## 🚀 Deployment
-
-### Production Build
-
-```bash
-npm run build:prod
-```
-
-### Environment Variables for Production
-
-Ensure your `.env.production` file contains:
-
-```env
-NODE_ENV=production
-DATABASE_URL=your-production-database-url
-HEDERA_NETWORK=mainnet
-HEDERA_OPERATOR_ID=your-mainnet-operator-id
-HEDERA_OPERATOR_KEY=your-mainnet-operator-key
-```
-
-### Deploy to Render
-
-This project includes a `render.yaml` configuration for easy deployment to Render.
-
-1. Push your code to GitHub
-2. Connect your repository to Render
-3. Render will automatically detect the configuration
-4. Set environment variables in Render dashboard
-5. Deploy! 🚀
-
----
-
 ## 🤝 Contributing
 
 Contributions are what make the open-source community amazing! Any contributions you make are **greatly appreciated**.
@@ -510,9 +478,8 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 
 Need help? Reach out:
 
-- 📧 Email: support@patenthash.com
-- 💬 Discord: [Join our server](#)
-- 🐦 Twitter: [@patenthash](#)
+- 📧 Email: phisherman.exe@gmail.com
+- 💬 X: [@phisherman](https://x.com/phisherman_)
 - 📖 Docs: [Documentation](#)
 
 ---
