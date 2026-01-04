@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { storage } from './storage';
-import { requireAuth, register, login, logout, getCurrentUser } from './auth';
+import { requireAuth, register, login, logout, getCurrentUser, verifyOTP, resendOTP } from './auth';
 import { requireUser, requireConsultant, requireAdmin, requireUserOrConsultant } from './roleMiddleware';
 import { aiService } from './services/aiService';
 import hederaService from './services/hederaService';
@@ -85,15 +85,18 @@ export async function setupRoutes(app: Express): Promise<Server> {
   app.use(session.default({
     store: new pgSession({
       pool: pool,
-      tableName: 'sessions'
+      tableName: 'sessions',
+      createTableIfMissing: true,
+      pruneSessionInterval: 60 * 60 * 24 // 1 day
     }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
     resave: false,
     saveUninitialized: false,
+    rolling: true, // Reset cookie expiration on every response
     cookie: {
       secure: IS_PRODUCTION, // HTTPS only in production
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       sameSite: IS_PRODUCTION ? 'none' : 'lax' // 'none' required for cross-origin in production
     }
   }));
@@ -141,6 +144,8 @@ export async function setupRoutes(app: Express): Promise<Server> {
   app.post('/api/auth/register', register);
   app.post('/api/auth/login', login);
   app.post('/api/auth/logout', logout);
+  app.post('/api/auth/verify-otp', verifyOTP);
+  app.post('/api/auth/resend-otp', resendOTP);
   app.get('/api/auth/user', getCurrentUser);
   
   // Profile routes

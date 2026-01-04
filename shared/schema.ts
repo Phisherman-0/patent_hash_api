@@ -37,6 +37,9 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role").default("user"),
   passwordHash: varchar("password_hash"),
+  isEmailVerified: boolean("is_email_verified").default(false),
+  emailVerificationToken: varchar("email_verification_token"),
+  emailVerificationExpiry: timestamp("email_verification_expiry"),
   settings: jsonb("settings").default(sql`'{}'`), // Store user preferences including theme
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
