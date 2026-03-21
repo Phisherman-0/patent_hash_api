@@ -12,9 +12,9 @@ const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'Patent Hash';
 // Create reusable transporter
 let transporter: nodemailer.Transporter | null = null;
 
-function getTransporter() {
+function getTransporter(): nodemailer.Transporter {
   if (!transporter) {
-    transporter = nodemailer.createTransporter({
+    transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_PORT === 465, // true for 465, false for other ports
