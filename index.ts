@@ -1,39 +1,44 @@
-import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { setupRoutes } from './routes/index';
-import { DatabaseStorage } from './storage';
+import { setupRoutes } from './routes';
 import dotenv from 'dotenv';
 
-const app = express();
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
+
+// Load environment variables based on NODE_ENV
+if (IS_PRODUCTION) {
+  dotenv.config({ path: '.env.production' });
+} else {
+  dotenv.config({ path: '.env' });
+}
+
+const app = express();
 
 // Environment-based configuration
 const FRONTEND_URL = process.env.FRONTEND_URL || (IS_PRODUCTION ? 'https://patent-hash-webapp.vercel.app' : 'http://localhost:3000');
 
 // CORS configuration - dynamic based on environment
-const corsOrigins = IS_PRODUCTION 
-  ? [FRONTEND_URL, 'https://patent-hash-webapp.vercel.app']
-  : [
-      'http://localhost:3000',
-      'http://localhost:3001', 
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001',
-      // Allow network access for development
-      'http://192.168.1.72:3000',
-      'http://192.168.1.*:3000',
-      // Generic network access patterns
-      /^http:\/\/192\.168\.\d+\.\d+:3000$/,
-      /^http:\/\/10\.\d+\.\d+\.\d+:3000$/,
-      /^http:\/\/172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+:3000$/
-    ];
+const corsOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001', 
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  FRONTEND_URL,
+  'https://patent-hash-webapp.vercel.app',
+  // Allow the OCI Public IP with any port
+  /^http:\/\/130\.162\.228\.97(:\d+)?$/,
+  // Allow network access for development (various local IP patterns)
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+(:\d+)?$/
+];
 
 app.use(cors({
   origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Set-Cookie']
 }));
 
@@ -112,6 +117,15 @@ if (IS_PRODUCTION) {
       version: '1.0.0',
       environment: NODE_ENV,
       timestamp: new Date().toISOString(),
+    });
+  });
+
+  // API Health check route
+  app.get('/api', (_req: Request, res: Response) => {
+    res.json({
+      message: 'Patent Hash API is active',
+      endpoint: '/api',
+      status: 'ready'
     });
   });
 
