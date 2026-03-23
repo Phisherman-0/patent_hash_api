@@ -102,6 +102,17 @@ if (IS_PRODUCTION) {
   });
 
 
+  // Health check / root route
+  app.get('/', (_req: Request, res: Response) => {
+    res.json({
+      name: 'Patent Hash API',
+      status: 'running',
+      version: '1.0.0',
+      environment: NODE_ENV,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   const port = parseInt(process.env.PORT || '5000', 10);
   const serverInstance = server.listen({
     port,

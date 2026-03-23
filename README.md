@@ -199,6 +199,25 @@ You should see: `{"status": "ok", "message": "Patent Hash API is running"}`
 | `npm run check` | ✅ Type-check TypeScript files |
 | `npm run db:push` | 📊 Push database schema changes |
 | `npm run db:studio` | 🎨 Open Drizzle Studio (database GUI) |
+| `npm run build:prod` | 🏗️ Type-check and build for production |
+
+---
+
+## ☁️ OCI Deployment
+
+The backend is configured for deployment on **Oracle Cloud Infrastructure (OCI)**.
+
+### 🛠️ Quick Deploy
+We provide a deployment script to automate updates on the OCI instance:
+
+```bash
+# Run the deployment script on your OCI instance
+chmod +x scripts/deploy-oci.sh
+./scripts/deploy-oci.sh
+```
+
+### 📖 Documentation
+For full details on the OCI setup (Nginx, PM2, Firewall), see [OCI_SETUP.md](./OCI_SETUP.md).
 
 ---
 
