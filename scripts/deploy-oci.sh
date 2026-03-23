@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-APP_DIR="/home/ubuntu/patent_hash/backend"
+APP_DIR="/github/patent_hash_api"
 PM2_NAME="patent-hash-backend"
 
 echo "🚀 Starting deployment to OCI..."

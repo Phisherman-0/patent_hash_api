@@ -7,7 +7,36 @@ This document records the steps taken to host the Patent Hash Backend on an Orac
 - **OS**: Ubuntu 22.04
 - **Public IP**: `130.162.228.97`
 
-## 2. Network Configuration (Cloud Level)
+## 2. PostgreSQL Setup (Local)
+Instead of using an external provider like Supabase, we installed a local PostgreSQL instance.
+
+### Installation
+```bash
+sudo apt update
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+### Database & User Creation
+```bash
+# Enter psql as the postgres superuser
+sudo -u postgres psql
+
+# Run these commands inside psql:
+CREATE USER patent_user WITH PASSWORD 'your_secure_password';
+CREATE DATABASE patent_hash OWNER patent_user;
+GRANT ALL PRIVILEGES ON DATABASE patent_hash TO patent_user;
+\q
+```
+
+### Environment Config
+Update `.env.production`:
+```env
+DATABASE_URL=postgresql://patent_user:your_secure_password@localhost:5432/patent_hash
+```
+
+## 3. Network Configuration (Cloud Level)
 In the OCI Console (Subnet > Security List):
 - **Ingress Rule**: Allow TCP Port `80` (HTTP) from `0.0.0.0/0`
 - **Ingress Rule**: Allow TCP Port `443` (HTTPS) from `0.0.0.0/0`
