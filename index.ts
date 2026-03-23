@@ -77,14 +77,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 if (IS_PRODUCTION) {
   app.set('trust proxy', 1);
   
-  // Force HTTPS in production
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.header('x-forwarded-proto') !== 'https') {
-      res.redirect(`https://${req.header('host')}${req.url}`);
-    } else {
-      next();
-    }
-  });
+  // Conditionally force HTTPS in production
+  if (process.env.FORCE_HTTPS === 'true') {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.header('x-forwarded-proto') !== 'https') {
+        res.redirect(`https://${req.header('host')}${req.url}`);
+      } else {
+        next();
+      }
+    });
+  }
 }
 
 (async () => {
