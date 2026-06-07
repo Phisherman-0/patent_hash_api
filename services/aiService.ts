@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { Patent } from "@shared/schema";
+import type { Patent } from "../models/index";
 import dotenv from "dotenv";
 
 // Load environment variables

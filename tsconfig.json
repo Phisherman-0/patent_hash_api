@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
+    "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowSyntheticDefaultImports": true,
@@ -14,15 +15,18 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "./dist",
-    "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["../shared/*"],
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-orm/mysql-core": ["./node_modules/drizzle-orm/mysql-core"],
+      "drizzle-zod": ["./node_modules/drizzle-zod"],
+      "zod": ["./node_modules/zod"]
     }
   },
   "include": [
     "server/**/*",
-    "shared/**/*",
+    "../shared/**/*",
     "*.ts",
     "services/**/*"
   ],

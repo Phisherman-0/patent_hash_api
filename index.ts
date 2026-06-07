@@ -1,17 +1,12 @@
+import './env'; // ← MUST be first: loads dotenv before any other module reads process.env
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { setupRoutes } from './routes';
-import dotenv from 'dotenv';
+import { initializeDatabase } from './db';
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
-
-// Load environment variables based on NODE_ENV
-if (IS_PRODUCTION) {
-  dotenv.config({ path: '.env.production' });
-} else {
-  dotenv.config({ path: '.env' });
-}
 
 const app = express();
 
@@ -44,6 +39,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
@@ -51,6 +47,12 @@ app.use('/uploads', express.static('uploads'));
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   const path = req.path;
+  
+  // Debug raw headers
+  if (path.startsWith("/api/auth/user") || path.startsWith("/api/dashboard")) {
+    console.log(`[Raw Headers] ${req.method} ${path}, Cookie Header: ${req.headers.cookie || 'MISSING'}`);
+  }
+  
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
@@ -95,6 +97,9 @@ if (IS_PRODUCTION) {
 }
 
 (async () => {
+  // Initialize database and run migrations
+  await initializeDatabase();
+  
   const server = await setupRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -130,21 +135,20 @@ if (IS_PRODUCTION) {
   });
 
   const port = parseInt(process.env.PORT || '5000', 10);
-  const serverInstance = server.listen({
+  server.listen({
     port,
-    host: "0.0.0.0", // Listen on all interfaces
+    host: "0.0.0.0",
     reusePort: true,
   }, async () => {
     console.log(`🚀 Server running on port ${port} (${NODE_ENV})`);
-    console.log(`💡 Type 'rs' and press Enter to restart the server`);
-    
-    // Log network access information
+    console.log(`💡 Type 'rs' + Enter in this terminal to restart (nodemon)`);
+
     if (!IS_PRODUCTION) {
       const os = await import('os');
       const networkInterfaces = os.networkInterfaces();
       console.log('\n🌐 Network access URLs:');
       console.log(`   Local: http://localhost:${port}`);
-      
+
       Object.keys(networkInterfaces).forEach(interfaceName => {
         const interfaces = networkInterfaces[interfaceName];
         if (interfaces) {
@@ -157,36 +161,4 @@ if (IS_PRODUCTION) {
       });
     }
   });
-
-  // Add restart functionality
-  if (process.stdin.isTTY) {
-    process.stdin.resume();
-    process.stdin.setEncoding('utf8');
-    
-    let inputBuffer = '';
-    
-    process.stdin.on('data', (data) => {
-      const input = data.toString().trim();
-      
-      // Handle Ctrl+C
-      if (input === '\u0003') {
-        process.exit();
-      }
-      
-      // Check for restart command
-      if (input === 'rs') {
-        console.log('🔄 Restarting server...');
-        serverInstance.close(() => {
-          // Signal tsx watch to restart by exiting with code 1
-          process.exit(1);
-        });
-        return;
-      }
-      
-      // Echo the input for feedback
-      if (input && input !== 'rs') {
-        console.log(`Unknown command: ${input}. Type 'rs' to restart.`);
-      }
-    });
-  }
 })();

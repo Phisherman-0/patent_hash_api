@@ -31,17 +31,41 @@ export async function comparePasswords(plainPassword: string, hashedPassword: st
   return bcrypt.compare(plainPassword, hashedPassword);
 }
 
-// Authentication middleware
+import jwt from 'jsonwebtoken';
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+
+// Cookie options
+const COOKIE_NAME = 'patent_hash_token';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+const setTokenCookie = (res: Response, token: string) => {
+  const options = {
+    httpOnly: true,
+    secure: false, // Explicitly false for HTTP dev
+    sameSite: 'lax' as const,
+    path: '/',
+    // Removed maxAge for local session testing
+  };
+  
+  console.log(`[Auth] Setting session cookie ${COOKIE_NAME}. Options:`, options);
+  res.cookie(COOKIE_NAME, token, options);
+};
+
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!(req.session as any)?.userId) {
+  // Debug log to see if cookies are being received
+  console.log(`[Auth] Path: ${req.path}, Cookies:`, req.cookies ? Object.keys(req.cookies) : 'No req.cookies');
+  
+  // Check cookie first (more secure), fallback to Authorization header
+  const token = req.cookies[COOKIE_NAME] || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+  
+  if (!token) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-  
-  // Get user data and attach to request
+
   try {
-    const user = await storage.getUser((req.session as any).userId);
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+    const user = await storage.getUserById(payload.userId);
     if (!user) {
-      req.session.destroy(() => {});
       return res.status(401).json({ message: 'User not found' });
     }
     
@@ -59,7 +83,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
-    return res.status(500).json({ message: 'Authentication failed' });
+    return res.status(401).json({ message: 'Invalid token' });
   }
 }
 
@@ -117,11 +141,15 @@ export async function register(req: Request, res: Response) {
     }
 
     // Set session
-    (req.session as any).userId = newUser.id;
+    
     
     // Return user without password and OTP
+    // Set cookie
+    const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '2d' });
+    setTokenCookie(res, token);
+    
     const { passwordHash, emailVerificationToken, ...userWithoutSensitiveData } = newUser;
-    res.status(201).json(userWithoutSensitiveData);
+    res.status(201).json({ user: userWithoutSensitiveData, token });
   } catch (error) {
     console.error('Registration error:', error);
     res.status(400).json({ 
@@ -159,11 +187,15 @@ export async function login(req: Request, res: Response) {
     }
 
     // Set session
-    (req.session as any).userId = user.id;
+    
     
     // Return user without password
+    // Set cookie
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '2d' });
+    setTokenCookie(res, token);
+    
     const { passwordHash: _, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
+    res.json({ user: userWithoutPassword, token });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Login failed' });
@@ -173,14 +205,8 @@ export async function login(req: Request, res: Response) {
 // Logout endpoint
 export async function logout(req: Request, res: Response) {
   try {
-    req.session?.destroy((err) => {
-      if (err) {
-        console.error('Logout error:', err);
-        return res.status(500).json({ message: 'Logout failed' });
-      }
-      res.clearCookie('connect.sid');
-      res.json({ message: 'Logged out successfully' });
-    });
+    res.clearCookie(COOKIE_NAME);
+    res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ message: 'Logout failed' });
@@ -190,13 +216,15 @@ export async function logout(req: Request, res: Response) {
 // Get current user endpoint
 export async function getCurrentUser(req: Request, res: Response) {
   try {
-    if (!(req.session as any)?.userId) {
+    const token = req.cookies[COOKIE_NAME] || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+    
+    if (!token) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
-
-    const user = await storage.getUser((req.session as any).userId);
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+    const user = await storage.getUserById(payload.userId);
     if (!user) {
-      req.session.destroy(() => {});
+      
       return res.status(401).json({ message: 'User not found' });
     }
 
@@ -213,7 +241,10 @@ export async function getCurrentUser(req: Request, res: Response) {
 export async function updateProfile(req: Request, res: Response) {
   try {
     const { firstName, lastName } = req.body;
-    const userId = (req.session as any)?.userId;
+    const token = req.cookies[COOKIE_NAME] || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+    const userId = payload.userId;
 
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -282,6 +313,12 @@ export async function verifyOTP(req: Request, res: Response) {
       emailVerificationExpiry: null,
       updatedAt: new Date()
     });
+
+    // Generate token and set cookie now that they are verified
+    if (updatedUser) {
+      const token = jwt.sign({ userId: updatedUser.id }, JWT_SECRET, { expiresIn: '2d' });
+      setTokenCookie(res, token);
+    }
 
     // Send welcome email
     await sendWelcomeEmail(user.email, `${user.firstName} ${user.lastName}`);

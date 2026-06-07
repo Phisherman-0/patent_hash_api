@@ -1,6 +1,18 @@
+import crypto from 'crypto';
 import { db } from './db';
-import { users, patents, patentDocuments, aiAnalysis, priorArtResults, blockchainTransactions, patentActivity, consultants, appointments, chatRooms, chatMessages } from './shared/schema';
-import type { User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, PatentActivity, InsertPatentActivity, UserSettings, Consultant, InsertConsultant, Appointment, InsertAppointment, ChatRoom, InsertChatRoom, ChatMessage, InsertChatMessage } from './shared/schema';
+import { 
+  users, patents, patentDocuments, aiAnalysis, priorArtResults, 
+  blockchainTransactions, patentActivity, consultants, appointments, 
+  chatRooms, chatMessages 
+} from './models/index';
+import type { 
+  User, InsertUser, UpsertUser, Patent, InsertPatent, PatentDocument, 
+  InsertPatentDocument, AIAnalysis, InsertAIAnalysis, PriorArtResult, 
+  InsertPriorArtResult, BlockchainTransaction, InsertBlockchainTransaction, 
+  PatentActivity, InsertPatentActivity, UserSettings, Consultant, 
+  InsertConsultant, Appointment, InsertAppointment, ChatRoom, 
+  InsertChatRoom, ChatMessage, InsertChatMessage 
+} from './models/index';
 import { eq, desc, and, ilike, sql } from "drizzle-orm";
 
 // Interface for storage operations
@@ -102,7 +114,7 @@ export class DatabaseStorage implements IStorage {
     if (!user) return undefined;
     return {
       ...user,
-      settings: user.settings as UserSettings | undefined
+      settings: user.settings as UserSettings | null
     };
   }
 
@@ -111,10 +123,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(userData: Omit<InsertUser, 'id'>): Promise<User> {
-    const [user] = await db.insert(users).values(userData).returning();
+    const insertId = crypto.randomUUID();
+    const dataToInsert = { ...userData, id: insertId };
+    await db
+      .insert(users)
+      .values(dataToInsert)
+      .onDuplicateKeyUpdate({
+        set: {
+          ...dataToInsert,
+          updatedAt: new Date(),
+        },
+      });
+    const [user] = await db.select().from(users).where(eq(users.id, insertId));
     return {
       ...user,
-      settings: user.settings as UserSettings | undefined
+      settings: user.settings as UserSettings | null
     };
   }
 
@@ -123,16 +146,17 @@ export class DatabaseStorage implements IStorage {
     if (!user) return undefined;
     return {
       ...user,
-      settings: user.settings as UserSettings | undefined
+      settings: user.settings as UserSettings | null
     };
   }
 
   async updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db.update(users).set(userData).where(eq(users.id, id)).returning();
+    await db.update(users).set(userData).where(eq(users.id, id));
+    const [user] = await db.select().from(users).where(eq(users.id, id));
     if (!user) return undefined;
     return {
       ...user,
-      settings: user.settings as UserSettings | undefined
+      settings: user.settings as UserSettings | null
     };
   }
 
@@ -140,16 +164,14 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUserById(userId);
     if (!user) return undefined;
     
-    const updatedSettings = { ...user.settings, ...settings };
-    const [updatedUser] = await db.update(users)
-      .set({ settings: updatedSettings })
-      .where(eq(users.id, userId))
-      .returning();
+    const updatedSettings = { ...(user.settings as any), ...settings };
+    await db.update(users).set({ settings: updatedSettings as any }).where(eq(users.id, userId));
+    const [updatedUser] = await db.select().from(users).where(eq(users.id, userId));
     
     if (!updatedUser) return undefined;
     return {
       ...updatedUser,
-      settings: updatedUser.settings as UserSettings | undefined
+      settings: updatedUser.settings as UserSettings | null
     };
   }
 
@@ -158,49 +180,72 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
+    const updateId = userData.id || crypto.randomUUID();
+    const dataToInsert = { ...userData, id: updateId };
+    await db
       .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
+      .values(dataToInsert)
+      .onDuplicateKeyUpdate({
         set: {
           ...userData,
           updatedAt: new Date(),
         },
-      })
-      .returning();
+      });
+    const [user] = await db.select().from(users).where(eq(users.id, updateId));
     return {
       ...user,
-      settings: user.settings as UserSettings | undefined
+      settings: user.settings as UserSettings | null
     };
   }
 
   // Patent operations
   async createPatent(patent: InsertPatent): Promise<Patent> {
-    const [newPatent] = await db.insert(patents).values(patent).returning();
-    return newPatent;
+    const id = crypto.randomUUID();
+    const newPatentToInsert = { id, ...patent };
+    await db.insert(patents).values(newPatentToInsert);
+    const [newPatent] = await db.select().from(patents).where(eq(patents.id, id));
+    return {
+      ...newPatent,
+      aiConfidence: newPatent.aiConfidence ? Number(newPatent.aiConfidence) : null,
+      estimatedValue: newPatent.estimatedValue ? Number(newPatent.estimatedValue) : null,
+    } as Patent;
   }
 
   async getPatent(id: string): Promise<Patent | undefined> {
-    const [patent] = await db.select().from(patents).where(eq(patents.id, id));
-    return patent;
+    const [patent] = await db.select().from(patents).where(eq(patents.id, id)).limit(1);
+    return patent ? {
+      ...patent,
+      aiConfidence: patent.aiConfidence ? Number(patent.aiConfidence) : null,
+      estimatedValue: patent.estimatedValue ? Number(patent.estimatedValue) : null,
+    } as Patent : undefined;
   }
 
   async getPatentsByUser(userId: string): Promise<Patent[]> {
-    return await db
+    const patentsList = await db
       .select()
       .from(patents)
       .where(eq(patents.userId, userId))
       .orderBy(desc(patents.createdAt));
+
+    return patentsList.map(p => ({
+      ...p,
+      aiConfidence: p.aiConfidence ? Number(p.aiConfidence) : null,
+      estimatedValue: p.estimatedValue ? Number(p.estimatedValue) : null,
+    } as Patent));
   }
 
   async updatePatent(id: string, updates: Partial<InsertPatent>): Promise<Patent> {
-    const [updatedPatent] = await db
+    await db
       .update(patents)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(patents.id, id))
-      .returning();
-    return updatedPatent;
+      .where(eq(patents.id, id));
+    
+    const [updatedPatent] = await db.select().from(patents).where(eq(patents.id, id));
+    return {
+      ...updatedPatent,
+      aiConfidence: updatedPatent.aiConfidence ? Number(updatedPatent.aiConfidence) : null,
+      estimatedValue: updatedPatent.estimatedValue ? Number(updatedPatent.estimatedValue) : null,
+    } as Patent;
   }
 
   async deletePatent(id: string): Promise<void> {
@@ -217,16 +262,25 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(patents.userId, userId));
     }
 
-    return await db
+    const patentsList = await db
       .select()
       .from(patents)
       .where(and(...conditions))
       .orderBy(desc(patents.createdAt));
+
+    return patentsList.map(p => ({
+      ...p,
+      aiConfidence: p.aiConfidence ? Number(p.aiConfidence) : null,
+      estimatedValue: p.estimatedValue ? Number(p.estimatedValue) : null,
+    } as Patent));
   }
 
   // Patent document operations
   async createPatentDocument(document: InsertPatentDocument): Promise<PatentDocument> {
-    const [newDocument] = await db.insert(patentDocuments).values(document).returning();
+    const id = crypto.randomUUID();
+    const newDocumentToInsert = { id, ...document };
+    await db.insert(patentDocuments).values(newDocumentToInsert);
+    const [newDocument] = await db.select().from(patentDocuments).where(eq(patentDocuments.id, id));
     return newDocument;
   }
 
@@ -252,7 +306,10 @@ export class DatabaseStorage implements IStorage {
 
   // AI analysis operations
   async createAIAnalysis(analysis: InsertAIAnalysis): Promise<AIAnalysis> {
-    const [newAnalysis] = await db.insert(aiAnalysis).values(analysis).returning();
+    const id = crypto.randomUUID();
+    const newAnalysisToInsert = { id, ...analysis };
+    await db.insert(aiAnalysis).values(newAnalysisToInsert);
+    const [newAnalysis] = await db.select().from(aiAnalysis).where(eq(aiAnalysis.id, id));
     return newAnalysis;
   }
 
@@ -271,7 +328,10 @@ export class DatabaseStorage implements IStorage {
 
   // Prior art operations
   async createPriorArtResult(result: InsertPriorArtResult): Promise<PriorArtResult> {
-    const [newResult] = await db.insert(priorArtResults).values(result).returning();
+    const id = crypto.randomUUID();
+    const newResultToInsert = { id, ...result };
+    await db.insert(priorArtResults).values(newResultToInsert);
+    const [newResult] = await db.select().from(priorArtResults).where(eq(priorArtResults.id, id));
     return newResult;
   }
 
@@ -285,7 +345,10 @@ export class DatabaseStorage implements IStorage {
 
   // Blockchain operations
   async createBlockchainTransaction(transaction: InsertBlockchainTransaction): Promise<BlockchainTransaction> {
-    const [newTransaction] = await db.insert(blockchainTransactions).values(transaction).returning();
+    const id = crypto.randomUUID();
+    const newTransactionToInsert = { id, ...transaction };
+    await db.insert(blockchainTransactions).values(newTransactionToInsert);
+    const [newTransaction] = await db.select().from(blockchainTransactions).where(eq(blockchainTransactions.id, id));
     return newTransaction;
   }
 
@@ -298,17 +361,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateBlockchainTransaction(id: string, updates: Partial<InsertBlockchainTransaction>): Promise<BlockchainTransaction> {
-    const [updatedTransaction] = await db
+    await db
       .update(blockchainTransactions)
-      .set(updates)
-      .where(eq(blockchainTransactions.id, id))
-      .returning();
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(blockchainTransactions.id, id));
+    
+    const [updatedTransaction] = await db.select().from(blockchainTransactions).where(eq(blockchainTransactions.id, id));
     return updatedTransaction;
   }
 
   // Activity operations
   async createPatentActivity(activity: InsertPatentActivity): Promise<PatentActivity> {
-    const [newActivity] = await db.insert(patentActivity).values(activity).returning();
+    const id = crypto.randomUUID();
+    const newActivityToInsert = { id, ...activity };
+    await db.insert(patentActivity).values(newActivityToInsert);
+    const [newActivity] = await db.select().from(patentActivity).where(eq(patentActivity.id, id));
     return newActivity;
   }
 
@@ -339,8 +406,8 @@ export class DatabaseStorage implements IStorage {
     const [stats] = await db
       .select({
         totalPatents: sql<number>`count(*)`,
-        pendingReviews: sql<number>`count(*) filter (where ${patents.status} in ('pending', 'under_review'))`,
-        blockchainVerified: sql<number>`count(*) filter (where ${patents.hederaTopicId} is not null)`,
+        pendingReviews: sql<number>`sum(case when ${patents.status} in ('pending', 'under_review') then 1 else 0 end)`,
+        blockchainVerified: sql<number>`sum(case when ${patents.blockchainTxHash} is not null then 1 else 0 end)`,
         portfolioValue: sql<string>`coalesce(sum(${patents.estimatedValue}), 0)`,
       })
       .from(patents)
@@ -356,22 +423,25 @@ export class DatabaseStorage implements IStorage {
 
   // Consultant operations
   async createConsultant(consultant: InsertConsultant): Promise<Consultant> {
-    const [newConsultant] = await db.insert(consultants).values(consultant).returning();
+    const id = crypto.randomUUID();
+    const newConsultantToInsert = { id, ...consultant };
+    await db.insert(consultants).values(newConsultantToInsert);
+    const [newConsultant] = await db.select().from(consultants).where(eq(consultants.id, id));
     return {
       ...newConsultant,
-      specialization: newConsultant.specialization ?? undefined,
-      bio: newConsultant.bio ?? undefined,
-      experienceYears: newConsultant.experienceYears ?? undefined,
+      specialization: newConsultant.specialization ?? null,
+      bio: newConsultant.bio ?? null,
+      experienceYears: newConsultant.experienceYears ?? null,
       hourlyRate: newConsultant.hourlyRate !== null && newConsultant.hourlyRate !== undefined ? 
-        Number(newConsultant.hourlyRate) : undefined,
+        Number(newConsultant.hourlyRate) : null,
       rating: newConsultant.rating !== null && newConsultant.rating !== undefined ? 
-        Number(newConsultant.rating) : undefined,
+        Number(newConsultant.rating) : null,
       isVerified: newConsultant.isVerified ?? false,
-      verifiedBy: newConsultant.verifiedBy ?? undefined,
-      verifiedAt: newConsultant.verifiedAt ?? undefined,
-      verificationNotes: newConsultant.verificationNotes ?? undefined,
-      createdAt: newConsultant.createdAt ?? undefined,
-      updatedAt: newConsultant.updatedAt ?? undefined,
+      verifiedBy: newConsultant.verifiedBy ?? null,
+      verifiedAt: newConsultant.verifiedAt ?? null,
+      verificationNotes: newConsultant.verificationNotes ?? null,
+      createdAt: newConsultant.createdAt ?? null,
+      updatedAt: newConsultant.updatedAt ?? null,
     };
   }
 
@@ -380,19 +450,19 @@ export class DatabaseStorage implements IStorage {
     if (!consultant) return undefined;
     return {
       ...consultant,
-      specialization: consultant.specialization ?? undefined,
-      bio: consultant.bio ?? undefined,
-      experienceYears: consultant.experienceYears ?? undefined,
+      specialization: consultant.specialization ?? null,
+      bio: consultant.bio ?? null,
+      experienceYears: consultant.experienceYears ?? null,
       hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ? 
-        Number(consultant.hourlyRate) : undefined,
+        Number(consultant.hourlyRate) : null,
       rating: consultant.rating !== null && consultant.rating !== undefined ? 
-        Number(consultant.rating) : undefined,
+        Number(consultant.rating) : null,
       isVerified: consultant.isVerified ?? false,
-      verifiedBy: consultant.verifiedBy ?? undefined,
-      verifiedAt: consultant.verifiedAt ?? undefined,
-      verificationNotes: consultant.verificationNotes ?? undefined,
-      createdAt: consultant.createdAt ?? undefined,
-      updatedAt: consultant.updatedAt ?? undefined,
+      verifiedBy: consultant.verifiedBy ?? null,
+      verifiedAt: consultant.verifiedAt ?? null,
+      verificationNotes: consultant.verificationNotes ?? null,
+      createdAt: consultant.createdAt ?? null,
+      updatedAt: consultant.updatedAt ?? null,
     };
   }
 
@@ -401,40 +471,41 @@ export class DatabaseStorage implements IStorage {
     if (!consultant) return undefined;
     return {
       ...consultant,
-      specialization: consultant.specialization ?? undefined,
-      bio: consultant.bio ?? undefined,
-      experienceYears: consultant.experienceYears ?? undefined,
+      specialization: consultant.specialization ?? null,
+      bio: consultant.bio ?? null,
+      experienceYears: consultant.experienceYears ?? null,
       hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ? 
-        Number(consultant.hourlyRate) : undefined,
+        Number(consultant.hourlyRate) : null,
       rating: consultant.rating !== null && consultant.rating !== undefined ? 
-        Number(consultant.rating) : undefined,
+        Number(consultant.rating) : null,
       isVerified: consultant.isVerified ?? false,
-      verifiedBy: consultant.verifiedBy ?? undefined,
-      verifiedAt: consultant.verifiedAt ?? undefined,
-      verificationNotes: consultant.verificationNotes ?? undefined,
-      createdAt: consultant.createdAt ?? undefined,
-      updatedAt: consultant.updatedAt ?? undefined,
+      verifiedBy: consultant.verifiedBy ?? null,
+      verifiedAt: consultant.verifiedAt ?? null,
+      verificationNotes: consultant.verificationNotes ?? null,
+      createdAt: consultant.createdAt ?? null,
+      updatedAt: consultant.updatedAt ?? null,
     };
   }
 
   async updateConsultant(id: string, updates: Partial<InsertConsultant>): Promise<Consultant | undefined> {
-    const [updatedConsultant] = await db.update(consultants).set(updates).where(eq(consultants.id, id)).returning();
+    await db.update(consultants).set(updates).where(eq(consultants.id, id));
+    const [updatedConsultant] = await db.select().from(consultants).where(eq(consultants.id, id));
     if (!updatedConsultant) return undefined;
     return {
       ...updatedConsultant,
-      specialization: updatedConsultant.specialization ?? undefined,
-      bio: updatedConsultant.bio ?? undefined,
-      experienceYears: updatedConsultant.experienceYears ?? undefined,
+      specialization: updatedConsultant.specialization ?? null,
+      bio: updatedConsultant.bio ?? null,
+      experienceYears: updatedConsultant.experienceYears ?? null,
       hourlyRate: updatedConsultant.hourlyRate !== null && updatedConsultant.hourlyRate !== undefined ? 
-        Number(updatedConsultant.hourlyRate) : undefined,
+        Number(updatedConsultant.hourlyRate) : null,
       rating: updatedConsultant.rating !== null && updatedConsultant.rating !== undefined ? 
-        Number(updatedConsultant.rating) : undefined,
+        Number(updatedConsultant.rating) : null,
       isVerified: updatedConsultant.isVerified ?? false,
-      verifiedBy: updatedConsultant.verifiedBy ?? undefined,
-      verifiedAt: updatedConsultant.verifiedAt ?? undefined,
-      verificationNotes: updatedConsultant.verificationNotes ?? undefined,
-      createdAt: updatedConsultant.createdAt ?? undefined,
-      updatedAt: updatedConsultant.updatedAt ?? undefined,
+      verifiedBy: updatedConsultant.verifiedBy ?? null,
+      verifiedAt: updatedConsultant.verifiedAt ?? null,
+      verificationNotes: updatedConsultant.verificationNotes ?? null,
+      createdAt: updatedConsultant.createdAt ?? null,
+      updatedAt: updatedConsultant.updatedAt ?? null,
     };
   }
 
@@ -461,21 +532,21 @@ export class DatabaseStorage implements IStorage {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email
-        } : undefined,
-        specialization: consultant.specialization ?? undefined,
-        bio: consultant.bio ?? undefined,
-        experienceYears: consultant.experienceYears ?? undefined,
+        } : null,
+        specialization: consultant.specialization ?? null,
+        bio: consultant.bio ?? null,
+        experienceYears: consultant.experienceYears ?? null,
         hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ? 
-          Number(consultant.hourlyRate) : undefined,
+          Number(consultant.hourlyRate) : null,
         rating: consultant.rating !== null && consultant.rating !== undefined ? 
-          Number(consultant.rating) : undefined,
+          Number(consultant.rating) : null,
         isVerified: consultant.isVerified ?? false,
-        verifiedBy: consultant.verifiedBy ?? undefined,
-        verifiedAt: consultant.verifiedAt ?? undefined,
-        verificationNotes: consultant.verificationNotes ?? undefined,
-        createdAt: consultant.createdAt ?? undefined,
-        updatedAt: consultant.updatedAt ?? undefined,
-      };
+        verifiedBy: consultant.verifiedBy ?? null,
+        verifiedAt: consultant.verifiedAt ?? null,
+        verificationNotes: consultant.verificationNotes ?? null,
+        createdAt: consultant.createdAt ?? null,
+        updatedAt: consultant.updatedAt ?? null,
+      } as Consultant;
     });
   }
 
@@ -483,19 +554,19 @@ export class DatabaseStorage implements IStorage {
     const consultantList = await db.select().from(consultants).where(eq(consultants.specialization, specialization));
     return consultantList.map(consultant => ({
       ...consultant,
-      specialization: consultant.specialization ?? undefined,
-      bio: consultant.bio ?? undefined,
-      experienceYears: consultant.experienceYears ?? undefined,
+      specialization: consultant.specialization ?? null,
+      bio: consultant.bio ?? null,
+      experienceYears: consultant.experienceYears ?? null,
       hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ? 
-        Number(consultant.hourlyRate) : undefined,
+        Number(consultant.hourlyRate) : null,
       rating: consultant.rating !== null && consultant.rating !== undefined ? 
-        Number(consultant.rating) : undefined,
+        Number(consultant.rating) : null,
       isVerified: consultant.isVerified ?? false,
-      verifiedBy: consultant.verifiedBy ?? undefined,
-      verifiedAt: consultant.verifiedAt ?? undefined,
-      verificationNotes: consultant.verificationNotes ?? undefined,
-      createdAt: consultant.createdAt ?? undefined,
-      updatedAt: consultant.updatedAt ?? undefined,
+      verifiedBy: consultant.verifiedBy ?? null,
+      verifiedAt: consultant.verifiedAt ?? null,
+      verificationNotes: consultant.verificationNotes ?? null,
+      createdAt: consultant.createdAt ?? null,
+      updatedAt: consultant.updatedAt ?? null,
     }));
   }
 
@@ -503,19 +574,19 @@ export class DatabaseStorage implements IStorage {
     const consultantList = await db.select().from(consultants).where(eq(consultants.isVerified, true));
     return consultantList.map(consultant => ({
       ...consultant,
-      specialization: consultant.specialization ?? undefined,
-      bio: consultant.bio ?? undefined,
-      experienceYears: consultant.experienceYears ?? undefined,
+      specialization: consultant.specialization ?? null,
+      bio: consultant.bio ?? null,
+      experienceYears: consultant.experienceYears ?? null,
       hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ? 
-        Number(consultant.hourlyRate) : undefined,
+        Number(consultant.hourlyRate) : null,
       rating: consultant.rating !== null && consultant.rating !== undefined ? 
-        Number(consultant.rating) : undefined,
+        Number(consultant.rating) : null,
       isVerified: consultant.isVerified ?? false,
-      verifiedBy: consultant.verifiedBy ?? undefined,
-      verifiedAt: consultant.verifiedAt ?? undefined,
-      verificationNotes: consultant.verificationNotes ?? undefined,
-      createdAt: consultant.createdAt ?? undefined,
-      updatedAt: consultant.updatedAt ?? undefined,
+      verifiedBy: consultant.verifiedBy ?? null,
+      verifiedAt: consultant.verifiedAt ?? null,
+      verificationNotes: consultant.verificationNotes ?? null,
+      createdAt: consultant.createdAt ?? null,
+      updatedAt: consultant.updatedAt ?? null,
     }));
   }
 
@@ -523,96 +594,95 @@ export class DatabaseStorage implements IStorage {
     const consultantList = await db.select().from(consultants).where(eq(consultants.isVerified, false));
     return consultantList.map(consultant => ({
       ...consultant,
-      specialization: consultant.specialization ?? undefined,
-      bio: consultant.bio ?? undefined,
-      experienceYears: consultant.experienceYears ?? undefined,
+      specialization: consultant.specialization ?? null,
+      bio: consultant.bio ?? null,
+      experienceYears: consultant.experienceYears ?? null,
       hourlyRate: consultant.hourlyRate !== null && consultant.hourlyRate !== undefined ? 
-        Number(consultant.hourlyRate) : undefined,
+        Number(consultant.hourlyRate) : null,
       rating: consultant.rating !== null && consultant.rating !== undefined ? 
-        Number(consultant.rating) : undefined,
+        Number(consultant.rating) : null,
       isVerified: consultant.isVerified ?? false,
-      verifiedBy: consultant.verifiedBy ?? undefined,
-      verifiedAt: consultant.verifiedAt ?? undefined,
-      verificationNotes: consultant.verificationNotes ?? undefined,
-      createdAt: consultant.createdAt ?? undefined,
-      updatedAt: consultant.updatedAt ?? undefined,
+      verifiedBy: consultant.verifiedBy ?? null,
+      verifiedAt: consultant.verifiedAt ?? null,
+      verificationNotes: consultant.verificationNotes ?? null,
+      createdAt: consultant.createdAt ?? null,
+      updatedAt: consultant.updatedAt ?? null,
     }));
   }
 
   async verifyConsultant(id: string, adminUserId: string, notes?: string): Promise<Consultant | undefined> {
-    const [updatedConsultant] = await db.update(consultants)
-      .set({
+    await db.update(consultants).set({
         isVerified: true,
         verifiedBy: adminUserId,
         verifiedAt: new Date(),
         verificationNotes: notes,
         updatedAt: new Date()
-      })
-      .where(eq(consultants.id, id))
-      .returning();
+      }).where(eq(consultants.id, id));
+    const [updatedConsultant] = await db.select().from(consultants).where(eq(consultants.id, id));
       
     if (!updatedConsultant) return undefined;
     
     return {
       ...updatedConsultant,
-      specialization: updatedConsultant.specialization ?? undefined,
-      bio: updatedConsultant.bio ?? undefined,
-      experienceYears: updatedConsultant.experienceYears ?? undefined,
+      specialization: updatedConsultant.specialization ?? null,
+      bio: updatedConsultant.bio ?? null,
+      experienceYears: updatedConsultant.experienceYears ?? null,
       hourlyRate: updatedConsultant.hourlyRate !== null && updatedConsultant.hourlyRate !== undefined ? 
-        Number(updatedConsultant.hourlyRate) : undefined,
+        Number(updatedConsultant.hourlyRate) : null,
       rating: updatedConsultant.rating !== null && updatedConsultant.rating !== undefined ? 
-        Number(updatedConsultant.rating) : undefined,
+        Number(updatedConsultant.rating) : null,
       isVerified: updatedConsultant.isVerified ?? false,
-      verifiedBy: updatedConsultant.verifiedBy ?? undefined,
-      verifiedAt: updatedConsultant.verifiedAt ?? undefined,
-      verificationNotes: updatedConsultant.verificationNotes ?? undefined,
-      createdAt: updatedConsultant.createdAt ?? undefined,
-      updatedAt: updatedConsultant.updatedAt ?? undefined,
+      verifiedBy: updatedConsultant.verifiedBy ?? null,
+      verifiedAt: updatedConsultant.verifiedAt ?? null,
+      verificationNotes: updatedConsultant.verificationNotes ?? null,
+      createdAt: updatedConsultant.createdAt ?? null,
+      updatedAt: updatedConsultant.updatedAt ?? null,
     };
   }
 
   async rejectConsultant(id: string, adminUserId: string, notes?: string): Promise<Consultant | undefined> {
-    const [updatedConsultant] = await db.update(consultants)
-      .set({
+    await db.update(consultants).set({
         isVerified: false,
         verifiedBy: adminUserId,
         verifiedAt: new Date(),
         verificationNotes: notes || 'Application rejected',
         updatedAt: new Date()
-      })
-      .where(eq(consultants.id, id))
-      .returning();
+      }).where(eq(consultants.id, id));
+    const [updatedConsultant] = await db.select().from(consultants).where(eq(consultants.id, id));
       
     if (!updatedConsultant) return undefined;
     
     return {
       ...updatedConsultant,
-      specialization: updatedConsultant.specialization ?? undefined,
-      bio: updatedConsultant.bio ?? undefined,
-      experienceYears: updatedConsultant.experienceYears ?? undefined,
+      specialization: updatedConsultant.specialization ?? null,
+      bio: updatedConsultant.bio ?? null,
+      experienceYears: updatedConsultant.experienceYears ?? null,
       hourlyRate: updatedConsultant.hourlyRate !== null && updatedConsultant.hourlyRate !== undefined ? 
-        Number(updatedConsultant.hourlyRate) : undefined,
+        Number(updatedConsultant.hourlyRate) : null,
       rating: updatedConsultant.rating !== null && updatedConsultant.rating !== undefined ? 
-        Number(updatedConsultant.rating) : undefined,
+        Number(updatedConsultant.rating) : null,
       isVerified: updatedConsultant.isVerified ?? false,
-      verifiedBy: updatedConsultant.verifiedBy ?? undefined,
-      verifiedAt: updatedConsultant.verifiedAt ?? undefined,
-      verificationNotes: updatedConsultant.verificationNotes ?? undefined,
-      createdAt: updatedConsultant.createdAt ?? undefined,
-      updatedAt: updatedConsultant.updatedAt ?? undefined,
+      verifiedBy: updatedConsultant.verifiedBy ?? null,
+      verifiedAt: updatedConsultant.verifiedAt ?? null,
+      verificationNotes: updatedConsultant.verificationNotes ?? null,
+      createdAt: updatedConsultant.createdAt ?? null,
+      updatedAt: updatedConsultant.updatedAt ?? null,
     };
   }
 
   // Appointment operations
   async createAppointment(appointment: InsertAppointment): Promise<Appointment> {
-    const [newAppointment] = await db.insert(appointments).values(appointment).returning();
+    const id = crypto.randomUUID();
+    const newAppointmentToInsert = { id, ...appointment };
+    await db.insert(appointments).values(newAppointmentToInsert);
+    const [newAppointment] = await db.select().from(appointments).where(eq(appointments.id, id));
     return {
       ...newAppointment,
-      description: newAppointment.description ?? undefined,
-      meetingLink: newAppointment.meetingLink ?? undefined,
+      description: newAppointment.description ?? null,
+      meetingLink: newAppointment.meetingLink ?? null,
       status: newAppointment.status ?? 'pending',
-      createdAt: newAppointment.createdAt ?? undefined,
-      updatedAt: newAppointment.updatedAt ?? undefined,
+      createdAt: newAppointment.createdAt ?? null,
+      updatedAt: newAppointment.updatedAt ?? null,
     };
   }
 
@@ -621,11 +691,11 @@ export class DatabaseStorage implements IStorage {
     if (!appointment) return undefined;
     return {
       ...appointment,
-      description: appointment.description ?? undefined,
-      meetingLink: appointment.meetingLink ?? undefined,
+      description: appointment.description ?? null,
+      meetingLink: appointment.meetingLink ?? null,
       status: appointment.status ?? 'pending',
-      createdAt: appointment.createdAt ?? undefined,
-      updatedAt: appointment.updatedAt ?? undefined,
+      createdAt: appointment.createdAt ?? null,
+      updatedAt: appointment.updatedAt ?? null,
     };
   }
 
@@ -648,12 +718,12 @@ export class DatabaseStorage implements IStorage {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email
-        } : undefined,
-        description: appointment.description ?? undefined,
-        meetingLink: appointment.meetingLink ?? undefined,
+        } : null,
+        description: appointment.description ?? null,
+        meetingLink: appointment.meetingLink ?? null,
         status: appointment.status ?? 'pending',
-        createdAt: appointment.createdAt ?? undefined,
-        updatedAt: appointment.updatedAt ?? undefined,
+        createdAt: appointment.createdAt ?? null,
+        updatedAt: appointment.updatedAt ?? null,
       };
     });
   }
@@ -677,26 +747,27 @@ export class DatabaseStorage implements IStorage {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email
-        } : undefined,
-        description: appointment.description ?? undefined,
-        meetingLink: appointment.meetingLink ?? undefined,
+        } : null,
+        description: appointment.description ?? null,
+        meetingLink: appointment.meetingLink ?? null,
         status: appointment.status ?? 'pending',
-        createdAt: appointment.createdAt ?? undefined,
-        updatedAt: appointment.updatedAt ?? undefined,
+        createdAt: appointment.createdAt ?? null,
+        updatedAt: appointment.updatedAt ?? null,
       };
     });
   }
 
   async updateAppointment(id: string, updates: Partial<InsertAppointment>): Promise<Appointment | undefined> {
-    const [updatedAppointment] = await db.update(appointments).set(updates).where(eq(appointments.id, id)).returning();
+    await db.update(appointments).set(updates).where(eq(appointments.id, id));
+    const [updatedAppointment] = await db.select().from(appointments).where(eq(appointments.id, id));
     if (!updatedAppointment) return undefined;
     return {
       ...updatedAppointment,
-      description: updatedAppointment.description ?? undefined,
-      meetingLink: updatedAppointment.meetingLink ?? undefined,
+      description: updatedAppointment.description ?? null,
+      meetingLink: updatedAppointment.meetingLink ?? null,
       status: updatedAppointment.status ?? 'pending',
-      createdAt: updatedAppointment.createdAt ?? undefined,
-      updatedAt: updatedAppointment.updatedAt ?? undefined,
+      createdAt: updatedAppointment.createdAt ?? null,
+      updatedAt: updatedAppointment.updatedAt ?? null,
     };
   }
 
@@ -717,20 +788,23 @@ export class DatabaseStorage implements IStorage {
       const room = existingRoom[0];
       return {
         ...room,
-        createdAt: room.createdAt ?? undefined,
-        updatedAt: room.updatedAt ?? undefined,
+        createdAt: room.createdAt ?? null,
+        updatedAt: room.updatedAt ?? null,
       };
     }
     
     // Create new chat room
-    const [newChatRoom] = await db.insert(chatRooms).values({
+    const id = crypto.randomUUID();
+    const newChatRoomToInsert = { id, ...{
       userId,
       consultantId
-    }).returning();
+    } };
+    await db.insert(chatRooms).values(newChatRoomToInsert);
+    const [newChatRoom] = await db.select().from(chatRooms).where(eq(chatRooms.id, id));
     return {
       ...newChatRoom,
-      createdAt: newChatRoom.createdAt ?? undefined,
-      updatedAt: newChatRoom.updatedAt ?? undefined,
+      createdAt: newChatRoom.createdAt ?? null,
+      updatedAt: newChatRoom.updatedAt ?? null,
     };
   }
 
@@ -739,8 +813,8 @@ export class DatabaseStorage implements IStorage {
     if (!chatRoom) return undefined;
     return {
       ...chatRoom,
-      createdAt: chatRoom.createdAt ?? undefined,
-      updatedAt: chatRoom.updatedAt ?? undefined,
+      createdAt: chatRoom.createdAt ?? null,
+      updatedAt: chatRoom.updatedAt ?? null,
     };
   }
 
@@ -753,8 +827,8 @@ export class DatabaseStorage implements IStorage {
     if (!chatRoom) return undefined;
     return {
       ...chatRoom,
-      createdAt: chatRoom.createdAt ?? undefined,
-      updatedAt: chatRoom.updatedAt ?? undefined,
+      createdAt: chatRoom.createdAt ?? null,
+      updatedAt: chatRoom.updatedAt ?? null,
     };
   }
 
@@ -762,8 +836,8 @@ export class DatabaseStorage implements IStorage {
     const chatRoomList = await db.select().from(chatRooms).where(eq(chatRooms.userId, userId)).orderBy(desc(chatRooms.createdAt));
     return chatRoomList.map(chatRoom => ({
       ...chatRoom,
-      createdAt: chatRoom.createdAt ?? undefined,
-      updatedAt: chatRoom.updatedAt ?? undefined,
+      createdAt: chatRoom.createdAt ?? null,
+      updatedAt: chatRoom.updatedAt ?? null,
     }));
   }
 
@@ -771,8 +845,8 @@ export class DatabaseStorage implements IStorage {
     const chatRoomList = await db.select().from(chatRooms).where(eq(chatRooms.consultantId, consultantId)).orderBy(desc(chatRooms.createdAt));
     return chatRoomList.map(chatRoom => ({
       ...chatRoom,
-      createdAt: chatRoom.createdAt ?? undefined,
-      updatedAt: chatRoom.updatedAt ?? undefined,
+      createdAt: chatRoom.createdAt ?? null,
+      updatedAt: chatRoom.updatedAt ?? null,
     }));
   }
 
@@ -781,11 +855,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createChatMessage(message: InsertChatMessage): Promise<ChatMessage> {
-    const [newMessage] = await db.insert(chatMessages).values(message).returning();
+    const id = crypto.randomUUID();
+    const newMessageToInsert = { id, ...message };
+    await db.insert(chatMessages).values(newMessageToInsert);
+    const [newMessage] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     return {
       ...newMessage,
       isRead: newMessage.isRead ?? false,
-      createdAt: newMessage.createdAt ?? undefined,
+      createdAt: newMessage.createdAt ?? null,
     };
   }
 
@@ -794,17 +871,18 @@ export class DatabaseStorage implements IStorage {
     return messageList.map(message => ({
       ...message,
       isRead: message.isRead ?? false,
-      createdAt: message.createdAt ?? undefined,
+      createdAt: message.createdAt ?? null,
     }));
   }
 
   async markMessageAsRead(id: string): Promise<ChatMessage | undefined> {
-    const [updatedMessage] = await db.update(chatMessages).set({ isRead: true }).where(eq(chatMessages.id, id)).returning();
+    await db.update(chatMessages).set({ isRead: true }).where(eq(chatMessages.id, id));
+    const [updatedMessage] = await db.select().from(chatMessages).where(eq(chatMessages.id, id));
     if (!updatedMessage) return undefined;
     return {
       ...updatedMessage,
       isRead: updatedMessage.isRead ?? false,
-      createdAt: updatedMessage.createdAt ?? undefined,
+      createdAt: updatedMessage.createdAt ?? null,
     };
   }
 

@@ -9,11 +9,10 @@ export function isValidEmail(email: string): boolean {
 }
 
 /**
- * Validate Hedera account ID format (0.0.xxxxx)
+ * Validate Base wallet address format (0x + 40 hex chars)
  */
-export function isValidHederaAccountId(accountId: string): boolean {
-  const hederaAccountPattern = /^0\.0\.\d+$/;
-  return hederaAccountPattern.test(accountId);
+export function isValidBaseAddress(address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(address);
 }
 
 /**
