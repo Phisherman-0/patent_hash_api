@@ -354,7 +354,7 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           port: ${{ secrets.OCI_SSH_PORT }}
           script: |
-            cd /github/patent_hash_api/server
+            cd github/backend
             bash scripts/deploy-oci.sh
 ```
 
