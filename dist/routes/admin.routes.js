@@ -1,0 +1,16 @@
+import { Router } from 'express';
+import { adminController } from '../controllers/admin.controller';
+import { requireAuth } from '../auth';
+import { requireAdmin } from '../roleMiddleware';
+const router = Router();
+router.use(requireAuth, requireAdmin);
+router.get('/users', adminController.getAllUsers);
+router.put('/users/:id/role', adminController.updateUserRole);
+router.get('/appointments', adminController.getAllAppointments);
+router.delete('/users/:id', adminController.deleteUser);
+router.get('/consultants', adminController.getAllConsultants);
+router.get('/consultants/unverified', adminController.getUnverifiedConsultants);
+router.put('/consultants/:id/verify', adminController.verifyConsultant);
+router.put('/consultants/:id/reject', adminController.rejectConsultant);
+router.get('/consultants/:id/status', adminController.getConsultantStatus);
+export default router;
