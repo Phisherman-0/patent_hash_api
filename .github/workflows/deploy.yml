@@ -19,5 +19,5 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           port: ${{ secrets.OCI_SSH_PORT }}
           script: |
-            cd /github/backend
+            cd github/backend
             bash scripts/deploy-oci.sh
