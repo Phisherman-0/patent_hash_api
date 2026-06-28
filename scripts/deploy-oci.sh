@@ -7,6 +7,7 @@ PM2_NAME="patent-hash-backend"
 echo "🚀 Starting deployment to OCI..."
 
 # Navigate to app directory
+cd --
 cd $APP_DIR || { echo "❌ Error: Could not find directory $APP_DIR"; exit 1; }
 
 # Pull latest changes
