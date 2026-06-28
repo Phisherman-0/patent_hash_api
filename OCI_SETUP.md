@@ -9,7 +9,7 @@ Patent Hash is a decentralized patent management system built on the **Base** bl
 | Layer | Technology |
 |---|---|
 | Frontend | React (Vite), Tailwind CSS, Shadcn UI, Wagmi/RainbowKit |
-| Backend | Node.js, Express, Drizzle ORM, PostgreSQL |
+| Backend | Node.js, Express, Drizzle ORM, MySQL |
 | Blockchain | Base L2 (Solidity Smart Contracts via Ethers.js) |
 | AI | Google Gemini API |
 | Process Manager | PM2 |
@@ -25,14 +25,16 @@ patent_hash/
 │
 ├── server/                 # Node.js/Express backend
 │   ├── controllers/        # Request handlers (Patent, Auth, AI, Blockchain)
-│   ├── models/             # Drizzle schema definitions
+│   ├── models/             # Drizzle schema definitions (MySQL dialect)
 │   ├── routes/             # Route files per domain
 │   ├── services/           # Core logic (AI, IPFS, blockchain integration)
 │   ├── middleware/         # Auth and role middleware
 │   ├── utils/              # Shared helpers
 │   ├── scripts/            # Deployment and maintenance scripts
+│   │   └── deploy-oci.sh   # Manual deployment script
 │   ├── storage.ts          # Database abstraction layer
-│   ├── db.ts               # Database connection & Drizzle initialization
+│   ├── db.ts               # MySQL connection (mysql2) & Drizzle initialization
+│   ├── drizzle.config.ts   # Drizzle Kit config (mysql dialect)
 │   ├── index.ts            # Express app entry point
 │   └── ecosystem.config.cjs # PM2 configuration
 │
@@ -68,24 +70,27 @@ The backend is hosted on an **Oracle Cloud Infrastructure (OCI)** Always Free co
 |---|---|
 | Shape | VM.Standard.E2.1.Micro (Always Free) |
 | OS | Ubuntu 22.04 |
-| Public IP | `130.162.228.97` |
+| App directory | `/github/patent_hash_api` |
 
 ---
 
 ## 1. Initial Server Preparation
+
+SSH into the server, then run:
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y curl git build-essential
 ```
 
-Install **Node.js** (via nvm):
+Install **Node.js** via nvm:
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
 nvm install 20
 nvm use 20
+node -v  # confirm
 ```
 
 Install **PM2** globally:
@@ -96,37 +101,42 @@ npm install -g pm2
 
 ---
 
-## 2. PostgreSQL Setup
-
-A local PostgreSQL instance is used instead of an external provider.
+## 2. MySQL Setup
 
 ```bash
-sudo apt install -y postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+sudo apt install -y mysql-server
+sudo systemctl start mysql
+sudo systemctl enable mysql
+```
+
+Secure the installation:
+
+```bash
+sudo mysql_secure_installation
 ```
 
 ### Database & User Creation
 
 ```bash
-sudo -u postgres psql
+sudo mysql -u root -p
 ```
 
-Inside `psql`:
+Inside the MySQL shell:
 
 ```sql
-CREATE USER patent_user WITH PASSWORD 'your_secure_password';
-CREATE DATABASE patent_hash OWNER patent_user;
-GRANT ALL PRIVILEGES ON DATABASE patent_hash TO patent_user;
-\q
+CREATE DATABASE patent_hash CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'patent_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+GRANT ALL PRIVILEGES ON patent_hash.* TO 'patent_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
 ```
 
 ### Environment Config
 
-Set the following in `.env.production`:
+Set in `.env.production`:
 
 ```env
-DATABASE_URL=postgresql://patent_user:your_secure_password@localhost:5432/patent_hash
+DATABASE_URL=mysql://patent_user:your_secure_password@localhost:3306/patent_hash
 ```
 
 ---
@@ -135,28 +145,28 @@ DATABASE_URL=postgresql://patent_user:your_secure_password@localhost:5432/patent
 
 ### OCI Console (Subnet > Security List)
 
-Add the following ingress rules:
+Add the following ingress rules in the OCI Console under **Networking > Virtual Cloud Networks > Subnet > Security List**:
 
 | Protocol | Port | Source |
 |---|---|---|
 | TCP | 80 | 0.0.0.0/0 |
 | TCP | 443 | 0.0.0.0/0 |
-| TCP | 5000 | 0.0.0.0/0 (direct API, optional) |
 
 ### OS-Level Firewall (iptables)
 
-Stop Apache2 if it is running and blocking port 80:
+Stop Apache2 if it is running:
 
 ```bash
 sudo systemctl stop apache2
 sudo systemctl disable apache2
 ```
 
-Open ports in iptables:
+Open ports in iptables and persist the rules:
 
 ```bash
 sudo iptables -I INPUT 5 -p tcp --dport 80 -j ACCEPT
 sudo iptables -I INPUT 6 -p tcp --dport 443 -j ACCEPT
+sudo apt install -y iptables-persistent
 sudo netfilter-persistent save
 ```
 
@@ -164,14 +174,12 @@ sudo netfilter-persistent save
 
 ## 4. Nginx Reverse Proxy
 
-Install Nginx and configure it to proxy traffic from port 80 to the Node.js app on port 5000.
-
 ```bash
 sudo apt install -y nginx
 sudo nano /etc/nginx/sites-available/patent-hash
 ```
 
-Paste the following configuration:
+Paste:
 
 ```nginx
 server {
@@ -192,7 +200,7 @@ server {
 }
 ```
 
-Enable the site and reload Nginx:
+Enable and reload:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/patent-hash /etc/nginx/sites-enabled/
@@ -200,38 +208,42 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### HTTPS with Let's Encrypt (Certbot)
+### HTTPS with Let's Encrypt
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d your_domain.com
 ```
 
-Certbot will automatically update the Nginx config for HTTPS and set up auto-renewal.
+Certbot updates the Nginx config automatically and sets up auto-renewal.
 
 ---
 
-## 5. Cloning & Building the App
+## 5. First-Time Deployment
+
+### Clone the repository
 
 ```bash
-git clone https://github.com/your-username/patent_hash.git
-cd patent_hash/server
-npm install
+sudo mkdir -p /github
+sudo chown $USER:$USER /github
+cd /github
+git clone https://github.com/your-username/patent_hash.git patent_hash_api
+cd patent_hash_api/server
 ```
 
-Copy and configure your environment file:
+### Configure environment
 
 ```bash
 cp .env.example .env.production
 nano .env.production
 ```
 
-Required environment variables:
+Required variables:
 
 ```env
 NODE_ENV=production
 PORT=5000
-DATABASE_URL=postgresql://patent_user:your_secure_password@localhost:5432/patent_hash
+DATABASE_URL=mysql://patent_user:your_secure_password@localhost:3306/patent_hash
 SESSION_SECRET=a_long_random_secret_string
 GEMINI_API_KEY=your_gemini_api_key
 FRONTEND_URL=https://your_frontend_domain.com
@@ -240,68 +252,146 @@ PRIVATE_KEY=your_operator_wallet_private_key
 CONTRACT_ADDRESS=your_deployed_contract_address
 ```
 
-Run database migrations:
+### Install, build, migrate
 
 ```bash
+npm install
+npm run build:prod
 npm run db:push
 ```
 
-Build for production:
-
-```bash
-npm run build:prod
-```
-
----
-
-## 6. Process Management (PM2)
-
-Start the app using the PM2 ecosystem config:
+### Start with PM2
 
 ```bash
 pm2 start ecosystem.config.cjs --env production
 pm2 save
-pm2 startup
-```
-
-The last command will print a command to run to enable PM2 to auto-start on reboot. Run that command.
-
-**Useful PM2 commands:**
-
-```bash
-pm2 status           # View running processes
-pm2 logs patent-hash # View live logs
-pm2 restart patent-hash
-pm2 stop patent-hash
+pm2 startup   # run the printed command to enable auto-start on reboot
 ```
 
 ---
 
-## 7. Deployment Updates
+## 6. Manual Deployment
 
-A helper script at `scripts/deploy-oci.sh` automates follow-up deployments on the server:
+After the first-time setup, subsequent deployments can be done by SSH-ing into the server and running:
 
 ```bash
+cd /github/patent_hash_api/server
 bash scripts/deploy-oci.sh
 ```
 
-This script runs:
-1. `git pull`
-2. `npm install`
-3. `npm run build:prod`
-4. `npm run db:push`
-5. `pm2 restart patent-hash`
+The script runs: `git pull` → `npm install` → `npm run build:prod` → `npm run db:push` → `pm2 restart`.
 
 ---
 
-## 8. Production Checklist
+## 7. CI/CD with GitHub Actions
 
-- [ ] PostgreSQL running and accessible locally
+GitHub Actions is used to automatically deploy to the OCI server on every push to the `main` branch.
+
+### How it works
+
+```
+Push to main
+    └── GitHub Actions runner
+            ├── SSH into OCI server
+            └── Run scripts/deploy-oci.sh
+```
+
+### Step 1 — Generate an SSH key pair for GitHub Actions
+
+On your **local machine** (or the server), generate a dedicated key pair:
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy_key -N ""
+```
+
+This creates:
+- `~/.ssh/github_deploy_key` — private key (goes into GitHub Secrets)
+- `~/.ssh/github_deploy_key.pub` — public key (goes onto the OCI server)
+
+### Step 2 — Authorize the key on the OCI server
+
+SSH into the server and add the public key:
+
+```bash
+cat ~/.ssh/github_deploy_key.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+### Step 3 — Add GitHub Secrets
+
+In your GitHub repository, go to **Settings > Secrets and variables > Actions** and add:
+
+| Secret Name | Value |
+|---|---|
+| `OCI_HOST` | Your server's public IP (e.g. `130.162.228.97`) |
+| `OCI_USER` | Your SSH username (e.g. `ubuntu`) |
+| `OCI_SSH_KEY` | The full contents of `~/.ssh/github_deploy_key` (private key) |
+| `OCI_SSH_PORT` | `22` (or your custom port if changed) |
+
+### Step 4 — Create the workflow file
+
+Create the file `.github/workflows/deploy.yml` in the **root** of your repository:
+
+```yaml
+name: Deploy to OCI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: SSH Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          port: ${{ secrets.OCI_SSH_PORT }}
+          script: |
+            cd /github/patent_hash_api/server
+            bash scripts/deploy-oci.sh
+```
+
+### Step 5 — Verify
+
+Push a commit to `main`. Go to **Actions** in your GitHub repository to watch the workflow run. A green checkmark means the deployment succeeded.
+
+To view live logs on the server after a deployment:
+
+```bash
+pm2 logs patent-hash-backend
+```
+
+---
+
+## 8. PM2 Reference
+
+```bash
+pm2 status                          # View all processes
+pm2 logs patent-hash-backend        # Live logs
+pm2 restart patent-hash-backend     # Restart the app
+pm2 stop patent-hash-backend        # Stop the app
+pm2 monit                           # CPU/memory monitor
+```
+
+---
+
+## 9. Production Checklist
+
+- [ ] MySQL running and accessible locally
 - [ ] `.env.production` fully configured with all required variables
-- [ ] Database migrations applied (`npm run db:push`)
+- [ ] Database created and migrations applied (`npm run db:push`)
 - [ ] Nginx configured and serving traffic on port 80/443
 - [ ] SSL certificate issued via Certbot
-- [ ] PM2 process running and set to auto-start on reboot (`pm2 startup && pm2 save`)
-- [ ] OCI security list rules allow ports 80 and 443
+- [ ] PM2 process running and persisted (`pm2 startup && pm2 save`)
+- [ ] OCI security list allows inbound TCP on ports 80 and 443
 - [ ] iptables rules persisted via `netfilter-persistent`
 - [ ] `SESSION_SECRET` is a strong, unique value
+- [ ] GitHub Actions `deploy.yml` workflow in place and tested
+- [ ] `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY`, `OCI_SSH_PORT` secrets set in GitHub
