@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development nodemon --exec 'tsx index.ts' --ext ts,json --ignore dist --ignore node_modules",
-    "build": "node node_modules/typescript/bin/tsc --noEmit && esbuild index.ts --platform=node --bundle --format=esm --outdir=dist --external:bcrypt --external:bufferutil --external:utf-8-validate --external:cpu-features --external:ssh2",
+    "build": "node node_modules/typescript/bin/tsc --noEmit && node esbuild.config.mjs",
     "start": "NODE_ENV=production node dist/index.js",
     "start:prod": "NODE_ENV=production node --env-file=.env.production dist/index.js",
     "check": "node node_modules/typescript/bin/tsc",
